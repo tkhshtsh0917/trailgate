@@ -1,50 +1,62 @@
 # Trailgate
 
-**保存済みLangfuse記録を監査し、出典を追えるChat SFT候補を作成します。**
+**Langfuse のエージェント軌跡を、出典を保ったまま収集・監査し、学習用候補へ整理します。**
 
-[English README](README.md) · [v1.0.0までのロードマップ](docs/ROADMAP.md)
+Trailgate はローカルで動く Python の CLI・ライブラリです。保存済み Observations v2 / Scores v3 応答ページの取り込み、範囲を限定した読み取り専用 API pull、enriched blob export の取り込みに対応します。元データの bytes と hash を保持し、観測できた decision と tool の関係を復元します。構造上の忠実性、品質選択、利用権、プライバシー、データ分割を別々に扱います。本体はモデル API を呼ばず、データセットを送信しません。
 
-現在のv0.1.0は、ローカルで動く初期版です。[Langfuse Observations API v2／Scores API v3](https://langfuse.com/docs/api-and-data-platform/features/public-api)の**保存済み応答ページ**を読み、元データのハッシュと照合可能なprivate archiveを作ります。Langfuse上の`input`がモデルへ渡った完全な入力とは限らないため、任意の`CaptureWriter`でモデル直前のmessages、利用可能tool、実際に渡したtool結果を別記録できます。
-
-本体のCLI・ライブラリはモデルAPIやネットワークに接続しません。有料モデルを使う実行例は`examples/`に分離し、テストでは動かしません。
-
-`src/trailgate/`は本体、`examples/synthetic/`は架空データ、`examples/live/`は明示実行する診断例、`tests/`はオフラインテスト、`docs/`はロードマップと公開手順です。
+[English README](README.md) · [ロードマップ](docs/ROADMAP.md) · [公開手順](docs/RELEASING.md)
 
 ## 架空データで試す
 
-リポジトリのルートで[uv](https://docs.astral.sh/uv/)を使います。Python 3.12.13を`.python-version`で指定しています。
+Python 3.12.13 と依存関係の lockfile を固定しています。リポジトリのルートで実行してください。
 
 ```sh
 uv sync --locked
 uv run --locked trailgate doctor --source langfuse --input examples/synthetic/snapshot
 uv run --locked trailgate ingest langfuse-api-snapshot examples/synthetic/snapshot --out private-example
 uv run --locked trailgate report private-example
-uv run --locked trailgate inspect private-example --trace trace-example
-uv run --locked trailgate export steps private-example --out private-steps.jsonl
-uv run --locked trailgate export sft private-example --rights-file examples/synthetic/rights.json --use internal_training --out private-sft.jsonl
+uv run --locked trailgate export graph private-example --out private-graph.json
+uv run --locked trailgate export dataset private-example \
+  --rights-file examples/synthetic/rights.json \
+  --policy-file examples/synthetic/policy.json \
+  --use internal_training --out private-dataset
 ```
 
-`private-*`はGitの対象から除外します。archive directoryは`0700`、作成するファイルは`0600`に設定し、既存の出力先を上書きしません。出力先を共有する前に内容を確認してください。fixtureの利用許可ファイルは、この**架空データのsnapshot IDだけ**に適用できます。元のページやcaptureを変更した場合は、新しいsnapshotに対する利用許可を確認して作成してください。
+架空の fixture には Chat SFT 対象の decision が 2 件あります。付属の権利申告とポリシーは、**この架空 snapshot ID にだけ**適用されます。`private-*` は Git から除外し、出力ディレクトリを `0700`、ファイルを `0600` で作成します。既存の出力は上書きしません。
 
-## 監査で分かること
+従来の `trailgate export sft` は互換性のため残した**候補診断用**です。品質・プライバシー・split は確認しません。学習用の判定には `export dataset` を使い、`manifest.json` と除外理由を確認してください。詳細は[データセット適格性](docs/DATASET.md)を参照してください。
 
-- 元のAPI応答ページを保存し、source row ID・hashと正規化後の内容を対応付けます。
-- generationごとに、モデル直前の入力、tool schema、assistant出力、対応するtool結果が記録されているか確認します。Chat SFT候補はテキストとfunction-callの形式を検査します。欠損を空のtool一覧や空の結果として補いません。
-- `faithful_candidates`は記録の構造的な整合性を表します。回答品質、学習の効果、データの利用権の認定ではありません。
-- Chat形式のSFT出力には、archiveの`snapshot_id`に一致する利用条件の自己申告が必要です。申告の真偽はTrailgateでは検証できません。provider-nativeのResponses記録は保持・監査しますが、現行のChat SFT出力へ暗黙に変換しません。
+## 入力と出力
 
-v0.1.0にはLangfuseからの直接取得、複数traceをまたぐepisode復元、scoreの意味的な帰属、機密情報の自動検出はありません。大規模収集やモデル学習の成果も主張しません。初期版の範囲と後続の合格条件は[ロードマップ](docs/ROADMAP.md)を参照してください。
+| 入力 | コマンド | 詳細 |
+|---|---|---|
+| 保存済み Observations v2 / Scores v3 応答ページ | `doctor`、`ingest langfuse-api-snapshot` | [API snapshot 形式](README.md#saved-api-snapshot) |
+| 稼働中の Langfuse API | `pull langfuse` | [範囲指定と再開](docs/PULL.md) |
+| ローカルに複製した enriched blob export | `ingest-blob` | [manifest に基づく逐次取り込み](docs/BLOB.md) |
+| アプリのモデル呼び出し境界 | `CaptureWriter` | [capture と復旧](docs/CAPTURE.md) |
 
-## 開発・確認
+`report` は件数と最大 100 件の decision 診断を既定で表示し、プロンプトや tool 結果の中身は表示しません。`export graph` は、内容を含む非公開の[episode graph](docs/EPISODE_GRAPH.md)を出力します。episode の開始・終了が不明な場合は `unknown` と記録します。`export dataset` は一般形式の episode、条件を満たした Chat SFT 行、出典・選択理由を持つ manifest を非公開ファイルとして出力します。score は後から付く根拠として別に扱い、過去のモデル入力へ混ぜません。
+
+## 判定の限界
+
+`faithful_candidates` は capture の**構造上の整合性**だけを表し、正答率や利用権の認定ではありません。Chat SFT はテキストと function call の範囲に対応します。provider-native の Responses 記録は元の形で archive と一般形式 episode に残し、Chat へ暗黙に変換しません。
+
+学習用データセットには、generation ID ごとの手動品質選択、task input・model output・tool result それぞれの利用許可、機微情報なしという明示的なプライバシー確認、task 単位の split 記録が必要です。これらは利用者の自己申告であり、Trailgate が品質・法的権利・プライバシーを独立に保証するものではありません。自動墨消し、完全な episode 境界、複数ログソースの取り込み、token 単位の loss mask、RL rollout 出力、モデル学習は v0.6.0 の範囲外です。
+
+[任意の live 診断](examples/live/README.md)は、明示して実行した場合だけ self-hosted Langfuse、モデル API、または MuSiQue の公式 train データを使います。本体とテストは架空データで動き、モデル API を呼びません。
+
+## 開発・検証
 
 ```sh
 uv run --locked ruff check src tests examples scripts
 uv run --locked ruff format --check src tests examples scripts
 uv run --locked python -m unittest discover -s tests -q
+uv run --locked --extra bulk-parquet python -m unittest discover -s tests -q
 uv build
 uv run --locked python scripts/check_public_files.py
+uv run --locked python scripts/benchmark_bulk.py --rows 100000
 ```
 
-公開候補のファイル名に秘密情報らしいものがある場合、公開検査は**中身を開かずに**失敗します。実データや環境変数ファイルはリポジトリへ追加しないでください。
+認証情報ファイル、private archive、実データの軌跡、コーパス本文を Git に追加しないでください。公開ファイル検査は安全性の補助であり、機微情報を全て検出できる保証ではありません。
 
-MITライセンスです。[LICENSE](LICENSE)を参照してください。
+MIT ライセンスです。[LICENSE](LICENSE)を参照してください。

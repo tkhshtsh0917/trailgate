@@ -10,10 +10,20 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .blob_manifest import BLOB_SOURCE_SCHEMA
 from .private_io import _private_bytes, _private_jsonl
 from .snapshot_input import SNAPSHOT_SCHEMA, SnapshotError, _parse_json, _read_json, read_snapshot
 
 ARCHIVE_SCHEMA = "trailgate.archive.v1"
+BULK_ARCHIVE_SCHEMA = "trailgate.archive.v2"
+
+
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _copy_raw(source: Path, raw: Path, hashes: dict[str, str]) -> None:
@@ -49,6 +59,7 @@ def _normalize_score(item: dict[str, Any]) -> dict[str, Any]:
     row = item["row"]
     return {
         "id": row["id"],
+        "project_id": row["projectId"],
         "name": row["name"],
         "value": row["value"],
         "data_type": row["dataType"],
@@ -117,19 +128,39 @@ def ingest_snapshot(source: Path, destination: Path) -> dict[str, Any]:
 
 
 def _validate_index(path: Path, index: dict[str, Any]) -> None:
-    if index.get("schema_version") != ARCHIVE_SCHEMA:
-        raise SnapshotError(f"archive schema_version must be {ARCHIVE_SCHEMA}")
+    schema = index.get("schema_version")
+    if schema not in {ARCHIVE_SCHEMA, BULK_ARCHIVE_SCHEMA}:
+        raise SnapshotError("unsupported archive schema_version")
+    if schema == BULK_ARCHIVE_SCHEMA and index.get("source_schema") != BLOB_SOURCE_SCHEMA:
+        raise SnapshotError("invalid bulk archive source schema")
     source_hashes = index.get("source_hashes")
     derived_hashes = index.get("derived_hashes")
     allowed_source = {"manifest.json", "observations.jsonl", "scores.jsonl", "capture.jsonl"}
     if (
         not isinstance(source_hashes, dict)
-        or not {"manifest.json", "observations.jsonl", "scores.jsonl"} <= source_hashes.keys()
-        or not source_hashes.keys() <= allowed_source
+        or not source_hashes
+        or (
+            schema == ARCHIVE_SCHEMA
+            and (
+                not {"manifest.json", "observations.jsonl", "scores.jsonl"} <= source_hashes.keys()
+                or not source_hashes.keys() <= allowed_source
+            )
+        )
+        or (schema == BULK_ARCHIVE_SCHEMA and "manifest.json" not in source_hashes)
         or not isinstance(derived_hashes, dict)
         or derived_hashes.keys() != {"observations.jsonl", "scores.jsonl"}
     ):
         raise SnapshotError("invalid archive hash manifest")
+    if not all(
+        isinstance(key, str)
+        and key
+        and not Path(key).is_absolute()
+        and ".." not in Path(key).parts
+        and isinstance(value, str)
+        and len(value) == 64
+        for key, value in source_hashes.items()
+    ):
+        raise SnapshotError("invalid source hash entry")
     calculated_snapshot_id = hashlib.sha256(
         json.dumps(source_hashes, sort_keys=True).encode()
     ).hexdigest()
@@ -137,11 +168,15 @@ def _validate_index(path: Path, index: dict[str, Any]) -> None:
         raise SnapshotError("snapshot_id does not match source hashes")
     for name, expected in source_hashes.items():
         file = path / "raw" / name
-        if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != expected:
+        if (
+            not file.resolve().is_relative_to((path / "raw").resolve())
+            or not file.is_file()
+            or _hash_file(file) != expected
+        ):
             raise SnapshotError(f"raw archive hash mismatch: {file}")
     for name, expected in derived_hashes.items():
         file = path / name
-        if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != expected:
+        if not file.is_file() or _hash_file(file) != expected:
             raise SnapshotError(f"derived archive hash mismatch: {file}")
 
 
@@ -161,6 +196,24 @@ def _archive_rows(path: Path, name: str) -> list[dict[str, Any]]:
     except UnicodeError as exc:
         raise SnapshotError(f"cannot read {file}: {exc}") from exc
     return result
+
+
+def iter_archive_rows(path: Path, name: str):
+    """Stream validated normalized rows after source and derived hash checks."""
+    path = Path(path)
+    _validate_index(path, _read_json(path / "index.json"))
+    file = path / name
+    if name not in {"observations.jsonl", "scores.jsonl"}:
+        raise SnapshotError("unsupported archive row file")
+    try:
+        with file.open("r", encoding="utf-8") as stream:
+            for line_no, line in enumerate(stream, 1):
+                item = _parse_json(line, f"{file}:{line_no}")
+                if not isinstance(item, dict):
+                    raise SnapshotError(f"{file}:{line_no}: expected an object")
+                yield item
+    except UnicodeError as exc:
+        raise SnapshotError(f"cannot read {file}: {exc}") from exc
 
 
 def read_archive(path: Path) -> dict[str, Any]:

@@ -359,6 +359,21 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(events[1]["provider_response"]["id"], "response-1")
         self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
 
+    def test_aborted_capture_is_rejected_without_fabricating_output(self) -> None:
+        def change(events):
+            events[:] = [
+                event
+                for event in events
+                if not (event["capture_id"] == "cap-answer" and event["kind"] == "finish")
+            ]
+            events.append({"kind": "abort", "capture_id": "cap-answer", "reason_code": "timeout"})
+
+        self._rewrite_capture(change)
+        ingest_snapshot(self.source, self.archive)
+        report = public_report(self.archive)
+        self.assertEqual(report["faithful_candidates"], 1)
+        self.assertEqual(report["reason_counts"]["aborted_decision"], 1)
+
     def test_responses_capture_is_audited_but_not_chat_sft_exported(self) -> None:
         capture = self.source / "capture.jsonl"
         events = [json.loads(line) for line in capture.read_text().splitlines()]

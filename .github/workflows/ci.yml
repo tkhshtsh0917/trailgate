@@ -26,6 +26,10 @@ jobs:
         run: uv run --locked python -m compileall -q src tests examples scripts
       - name: Test
         run: uv run --locked python -m unittest discover -s tests -v
+      - name: Optional Parquet path
+        run: uv run --locked --extra bulk-parquet python -m unittest discover -s tests -p test_bulk_archive.py -v
+      - name: Bulk resource gate
+        run: uv run --locked --extra bulk-parquet python scripts/benchmark_bulk.py --rows 100000 --max-rss-mib 1024
       - name: CLI
         run: uv run --locked trailgate doctor --source langfuse --input examples/synthetic/snapshot
       - name: Build

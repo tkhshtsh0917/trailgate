@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
 
 from .decision_audit import audit, public_report
-from .private_io import _private_jsonl
+from .episode_graph import build_episode_graph
+from .private_io import _private_bytes, _private_jsonl
 from .snapshot_input import SnapshotError, _parse_json
 
 RIGHTS_SCHEMA = "trailgate.use_manifest.v1"
@@ -49,7 +51,7 @@ def _check_rights(path: Path, use: str, snapshot_id: str) -> tuple[dict[str, Any
 
 
 def export_sft(archive_path: Path, rights_path: Path, use: str, output: Path) -> int:
-    """Export only capture-backed decisions with explicit use attestation."""
+    """Export capture-backed candidate rows; quality/privacy/splits remain unchecked."""
     rights_path = Path(rights_path)
     report = audit(archive_path)
     rights, rights_hash = _check_rights(rights_path, use, report["snapshot_id"])
@@ -65,6 +67,7 @@ def export_sft(archive_path: Path, rights_path: Path, use: str, output: Path) ->
         begin, finish = decision["_begin"], decision["_finish"]
         rows.append(
             {
+                "eligibility": "candidate_only",
                 "messages": [*begin["messages"], finish["assistant_message"]],
                 "tools": begin["tools"],
                 "source": {
@@ -97,3 +100,15 @@ def export_steps(archive_path: Path, output: Path) -> int:
         raise SnapshotError(f"output parent does not exist: {output.parent}")
     _private_jsonl(output, report["decisions"])
     return len(report["decisions"])
+
+
+def export_graph(archive_path: Path, output: Path) -> dict[str, int]:
+    """Write a private graph containing exact captured prefixes and deliveries."""
+    graph = build_episode_graph(archive_path)
+    output = Path(output)
+    if output.exists():
+        raise SnapshotError(f"output already exists: {output}")
+    if not output.parent.is_dir():
+        raise SnapshotError(f"output parent does not exist: {output.parent}")
+    _private_bytes(output, (json.dumps(graph, ensure_ascii=False, sort_keys=True) + "\n").encode())
+    return {"episodes": len(graph["episodes"]), "decisions": len(graph["decisions"])}

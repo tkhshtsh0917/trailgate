@@ -1,0 +1,20 @@
+{
+  "schema_version": "trailgate.dataset_policy.v1",
+  "snapshot_id": "12b7d6af388c8900a721235a2c5b2e03a2fb8a0d6f4e6be52d2d85940eb11f81",
+  "use": "internal_training",
+  "quality": {
+    "method": "manual_observation_review",
+    "reviewed_by": "Trailgate synthetic fixture authors",
+    "approved_observation_ids": ["gen-search", "gen-answer"]
+  },
+  "privacy": {
+    "method": "manual_review",
+    "reviewed_by": "Trailgate synthetic fixture authors",
+    "confirmed_at": "2026-10-24",
+    "sensitive_data": "absent",
+    "redaction": "none"
+  },
+  "splits": [
+    {"trace_id": "trace-example", "task_id": "fictional-task", "split": "train"}
+  ]
+}

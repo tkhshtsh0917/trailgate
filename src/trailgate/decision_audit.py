@@ -21,7 +21,7 @@ def _capture_events(archive: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         if not isinstance(capture_id, str) or not capture_id:
             raise SnapshotError(f"{path}:{line_no}: capture_id is required")
         kind = event.get("kind")
-        if not isinstance(kind, str) or kind not in {"begin", "finish", "delivery"}:
+        if not isinstance(kind, str) or kind not in {"begin", "finish", "delivery", "abort"}:
             raise SnapshotError(f"{path}:{line_no}: unknown capture event kind")
         events[capture_id].append(event)
     return events
@@ -208,6 +208,12 @@ def _decision(
         begins = [event for event in events if event["kind"] == "begin"]
         finishes = [event for event in events if event["kind"] == "finish"]
         deliveries = [event for event in events if event["kind"] == "delivery"]
+        aborts = [event for event in events if event["kind"] == "abort"]
+
+        if aborts:
+            reasons.append("aborted_decision" if len(aborts) == 1 else "duplicate_abort")
+            if finishes or deliveries:
+                reasons.append("conflicting_capture_terminal_events")
 
         if len(begins) != 1:
             reasons.append("missing_or_duplicate_model_visible_input")

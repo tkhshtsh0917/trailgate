@@ -29,11 +29,9 @@ Milestones are gates, not calendar dates. A preview may ship with explicit limit
 
 ## Current state and next implementation slices
 
-The v0.1.0 source preview has a synthetic quickstart, release checklist, lint and unit checks, build checks, and an initial commit. Chat SFT projection checks a narrow text/function-call envelope, and the self-attested rights manifest is bound to the imported snapshot ID. This is an offline preview; the broader dataset eligibility gate remains a later milestone. A package release has not been made.
+The v0.6.0 source milestone implements the episode graph, bounded capture and recovery, read-only v2/v3 pull, resumable enriched-blob intake, and gated dataset exports. Fictional fixtures cover adversarial capture states, checkpoint recovery, score revision, and split leakage. A local self-hosted Langfuse trace and score have been pulled and compared with offline import without a model call. The 100,000-observation resource gate runs in CI. No package-index release has been made.
 
-1. **Episode schema and fixtures:** define canonical event JSON Schema and state transitions; add pathological synthetic snapshots before writing a broad stitcher. Keep `candidate` (structural) separate from `quality` and `rights` in both report and API names.
-2. **Collector specification:** write a bounded v2/v3 pull contract with cursor, idempotency key, incomplete-page recovery, delayed-score revision, and credential handling, then implement the smallest read-only vertical slice.
-3. **Capture hardening:** make begin/finish/abort and delivered-result boundaries explicit, then test interrupted and concurrent writes before treating them as complete decisions.
+Next, v0.9.0 must freeze public schemas and contracts, add a compatibility matrix with tested server versions, publish migration and threat-model guidance, and run one cross-path conformance suite. Large dataset graph exports are not yet resource-bounded; the bulk memory gate covers import and summary only.
 
 ## v1 release rules
 

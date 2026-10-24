@@ -6,6 +6,7 @@ application attaches the returned ID to its Langfuse generation metadata.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import stat
@@ -13,6 +14,9 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+CAPTURE_SCHEMA = "trailgate.capture.v1"
+MAX_CAPTURE_EVENT_BYTES = 8 * 1024 * 1024
 
 
 class CaptureWriter:
@@ -24,8 +28,11 @@ class CaptureWriter:
             raise PermissionError(f"capture file must be private (0600): {self.path}")
 
     def _append(self, event: dict[str, Any]) -> None:
+        event["schema_version"] = CAPTURE_SCHEMA
         event["recorded_at"] = datetime.now(UTC).isoformat()
         data = (json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n").encode()
+        if len(data) > MAX_CAPTURE_EVENT_BYTES:
+            raise ValueError("capture event exceeds the 8 MiB limit")
 
         flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
         if hasattr(os, "O_NOFOLLOW"):
@@ -33,13 +40,19 @@ class CaptureWriter:
 
         fd = os.open(self.path, flags, 0o600)
         try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
             if stat.S_IMODE(os.fstat(fd).st_mode) & 0o077:
                 raise PermissionError(f"capture file must be private (0600): {self.path}")
 
             offset = 0
             while offset < len(data):
-                offset += os.write(fd, data[offset:])
+                written = os.write(fd, data[offset:])
+                if written <= 0:
+                    raise OSError("capture append did not advance")
+                offset += written
+            os.fsync(fd)
         finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
 
     def begin_decision(
@@ -89,6 +102,12 @@ class CaptureWriter:
         if provider_response is not None:
             event["provider_response"] = provider_response
         self._append(event)
+
+    def abort_decision(self, capture_id: str, *, reason_code: str) -> None:
+        """Mark an interrupted inference without fabricating an assistant response."""
+        if not capture_id or not isinstance(reason_code, str) or not reason_code:
+            raise ValueError("capture_id and reason_code are required")
+        self._append({"kind": "abort", "capture_id": capture_id, "reason_code": reason_code})
 
     def delivered_tool_result(
         self,
