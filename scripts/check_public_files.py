@@ -70,9 +70,8 @@ def artifact_paths() -> list[tuple[str, str]]:
     return members
 
 
-def main() -> int:
+def _candidate_issues(candidates: list[Path]) -> list[str]:
     failures = []
-    candidates = candidate_paths()
     for relative in candidates:
         if private_path(relative):
             failures.append(f"{relative}: sensitive path must not be published")
@@ -95,10 +94,20 @@ def main() -> int:
             failures.append(f"{relative}: not UTF-8 text")
             continue
         failures.extend(f"{relative}:{number}: {name}" for number, name in content_issues(content))
+    return failures
 
+
+def _artifact_issues() -> list[str]:
+    failures = []
     for artifact, member in artifact_paths():
         if private_path(Path(member)):
             failures.append(f"{artifact}: sensitive archive member path")
+    return failures
+
+
+def main() -> int:
+    candidates = candidate_paths()
+    failures = [*_candidate_issues(candidates), *_artifact_issues()]
 
     if failures:
         print("Public-file check failed:", file=sys.stderr)

@@ -16,17 +16,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from live_langfuse_smoke import _save_snapshot
-from live_musique_pilot import (
+from langfuse_snapshot import LOCAL_LANGFUSE_URL, _reconcile_score, _save_snapshot
+from musique_corpus import (
     INDEX_SHA256,
-    LOCAL_LANGFUSE_URL,
     SOURCE_SHA256,
     TOOLS,
     FrozenSearch,
     _gold_string_present,
     _load_tasks,
     _private_json,
-    _reconcile_score,
     _sha256,
 )
 
@@ -119,6 +117,7 @@ def _run_task(
         grep_limit=arm.grep_limit,
         displayed_total=arm.displayed_total,
     )
+
     input_items: list[dict[str, Any]] = [
         {"role": "system", "content": _system_prompt(arm)},
         {"role": "user", "content": task["question"]},
@@ -129,6 +128,7 @@ def _run_task(
     calls_made = 0
     reasoning_tokens = 0
     started = datetime.now(UTC)
+
     try:
         with langfuse.start_as_current_observation(
             as_type="agent",
@@ -155,6 +155,7 @@ def _run_task(
                 if _estimated_usd(totals) + worst_next >= MAX_ESTIMATED_USD:
                     stop_reason = "estimated_cost_ceiling"
                     break
+
                 request_parameters = {
                     "model": MODEL,
                     "reasoning": {"effort": REASONING_EFFORT},
@@ -172,6 +173,7 @@ def _run_task(
                     provider_format="openai_responses",
                     request_parameters=request_parameters,
                 )
+
                 with langfuse.start_as_current_observation(
                     as_type="generation",
                     name=f"responses-retrieval-decision-{turn + 1}",
@@ -222,6 +224,7 @@ def _run_task(
                     generation.update(
                         output={"assistant_projection": assistant, "status": response.status}
                     )
+
                 if not tool_calls:
                     answer = assistant["content"]
                     stop_reason = (
@@ -234,6 +237,7 @@ def _run_task(
                     raise RuntimeError(
                         "parallel function calls were returned despite parallel_tool_calls=False"
                     )
+
                 call = tool_calls[0]
                 result = search.execute(call.name, call.arguments)
                 delivered = json.dumps(result, ensure_ascii=False)
@@ -251,6 +255,7 @@ def _run_task(
                         result.get("truncated_right") or result.get("truncated_by_display_budget")
                     ),
                 )
+
                 # Stateless replay must retain returned reasoning and function-call
                 # items exactly, then append the actual tool result.
                 input_items = [
@@ -266,6 +271,7 @@ def _run_task(
     support_titles = {p["title"] for p in task["paragraphs"] if p["is_supporting"]}
     weak_match = _gold_string_present(answer, task["answer"], task.get("answer_aliases") or [])
     score_id = str(uuid.uuid4())
+
     langfuse.create_score(
         name="gold_string_present_weak",
         value=1.0 if weak_match else 0.0,
@@ -275,6 +281,7 @@ def _run_task(
         comment="Weak exact-string diagnostic; not a semantic correctness or training reward judgment.",
     )
     langfuse.flush()
+
     ended = datetime.now(UTC)
     _private_json(
         out / "run_state.json",
@@ -290,6 +297,7 @@ def _run_task(
     archive = out / "archive"
     ingest_snapshot(snapshot, archive)
     report = public_report(archive)
+
     result = {
         "task_id": task["id"],
         "trace_id": trace_id,
@@ -340,6 +348,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     out = args.out.absolute()
+
     if out.exists() or not out.parent.is_dir():
         parser.error("--out must be a new directory under an existing parent")
     if _sha256(args.archive) != SOURCE_SHA256 or _sha256(args.db) != INDEX_SHA256:
@@ -353,6 +362,7 @@ def main() -> None:
         if args.all_six
         else STANDARD
     )
+
     tasks = _load_tasks(args.archive, args.task_manifest)
     tasks = [tasks[position] for position in arm.task_positions]
     os.environ["LANGFUSE_BASE_URL"] = LOCAL_LANGFUSE_URL
@@ -362,6 +372,7 @@ def main() -> None:
     langfuse = get_client()
     if not langfuse.auth_check():
         raise RuntimeError("local Langfuse authentication failed; no model call made")
+
     client = OpenAI(max_retries=0, timeout=180.0)
     out.mkdir(mode=0o700)
     _private_json(
@@ -393,6 +404,7 @@ def main() -> None:
         "missing_usage_calls": 0,
     }
     results = []
+
     for task in tasks:
         result = _run_task(client, langfuse, task, args.db, out / task["id"], totals, arm)
         results.append(result)
@@ -414,6 +426,7 @@ def main() -> None:
             ),
             flush=True,
         )
+
     for result in results:
         if result["scores_in_snapshot"] == 0:
             try:
@@ -425,6 +438,7 @@ def main() -> None:
                 result["score_reconciliation_error"] = str(exc)
         else:
             result["scores_after_reconciliation"] = result["scores_in_snapshot"]
+
     summary = {
         "tasks": len(results),
         "model_calls": sum(row["calls"] for row in results),

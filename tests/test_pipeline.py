@@ -9,13 +9,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from trailgate import snapshot
+from trailgate import archive
 from trailgate.audit import export_sft, public_report
 from trailgate.capture import CaptureWriter
 from trailgate.snapshot import SnapshotError, ingest_snapshot, read_snapshot
 
-FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "synthetic_snapshot"
-RIGHTS = Path(__file__).resolve().parents[1] / "examples" / "synthetic_rights.json"
+FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "synthetic" / "snapshot"
+RIGHTS = Path(__file__).resolve().parents[1] / "examples" / "synthetic" / "rights.json"
 
 
 class PipelineTests(unittest.TestCase):
@@ -134,7 +134,7 @@ class PipelineTests(unittest.TestCase):
             read_snapshot(self.source)
 
     def test_source_change_during_import_is_rejected_transactionally(self) -> None:
-        original = snapshot.read_snapshot
+        original = archive.read_snapshot
 
         def read_then_change(source):
             parsed = original(source)
@@ -142,7 +142,7 @@ class PipelineTests(unittest.TestCase):
                 stream.write(" ")
             return parsed
 
-        with patch.object(snapshot, "read_snapshot", side_effect=read_then_change):
+        with patch.object(archive, "read_snapshot", side_effect=read_then_change):
             with self.assertRaisesRegex(SnapshotError, "source changed during import"):
                 ingest_snapshot(self.source, self.archive)
         self.assertFalse(self.archive.exists())

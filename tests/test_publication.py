@@ -11,7 +11,7 @@ class PublicationTests(unittest.TestCase):
         self.assertTrue(private_path(Path("private-run/capture.jsonl")))
         self.assertTrue(private_path(Path("local-langfuse.env")))
         self.assertTrue(private_path(Path("data/raw.sqlite")))
-        self.assertFalse(private_path(Path("examples/synthetic_snapshot/manifest.json")))
+        self.assertFalse(private_path(Path("examples/synthetic/snapshot/manifest.json")))
 
     def test_content_scan_reports_rules_without_payload(self) -> None:
         personal_path = "/" + "Users" + "/example/work/file.py"

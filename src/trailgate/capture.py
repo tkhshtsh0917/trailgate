@@ -26,13 +26,16 @@ class CaptureWriter:
     def _append(self, event: dict[str, Any]) -> None:
         event["recorded_at"] = datetime.now(UTC).isoformat()
         data = (json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n").encode()
+
         flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
+
         fd = os.open(self.path, flags, 0o600)
         try:
             if stat.S_IMODE(os.fstat(fd).st_mode) & 0o077:
                 raise PermissionError(f"capture file must be private (0600): {self.path}")
+
             offset = 0
             while offset < len(data):
                 offset += os.write(fd, data[offset:])
@@ -54,6 +57,7 @@ class CaptureWriter:
             raise ValueError("unsupported provider_format")
         if request_parameters is not None and not isinstance(request_parameters, dict):
             raise TypeError("request_parameters must be an object")
+
         capture_id = uuid.uuid4().hex
         event = {
             "kind": "begin",
@@ -80,6 +84,7 @@ class CaptureWriter:
             raise ValueError("assistant_message must be a role=assistant object")
         if provider_response is not None and not isinstance(provider_response, dict):
             raise TypeError("provider_response must be an object")
+
         event = {"kind": "finish", "capture_id": capture_id, "assistant_message": assistant_message}
         if provider_response is not None:
             event["provider_response"] = provider_response
@@ -97,6 +102,7 @@ class CaptureWriter:
         """Record the actual result handed to the model, after host processing."""
         if not capture_id or not call_id or not observation_id or not isinstance(truncated, bool):
             raise ValueError("call_id, observation_id and boolean truncated are required")
+
         self._append(
             {
                 "kind": "delivery",

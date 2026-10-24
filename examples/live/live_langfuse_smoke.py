@@ -10,19 +10,20 @@ import argparse
 import json
 import os
 import re
-import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from langfuse_snapshot import LOCAL_LANGFUSE_URL, _json_bytes, _save_snapshot
+
 from trailgate.capture import CaptureWriter
-from trailgate.snapshot import SNAPSHOT_SCHEMA, _private_bytes, ingest_snapshot, read_snapshot
+from trailgate.private_io import _private_bytes
+from trailgate.snapshot import ingest_snapshot
 
 MODEL = "gpt-6-luna"
 MAX_CALLS = 2
 MAX_COMPLETION_TOKENS = 256
 MAX_ESTIMATED_USD = 0.01
-LOCAL_LANGFUSE_URL = "http://127.0.0.1:3000"
 QUESTION = "In the 2025 Orion plan, which storage engine is specified and what is its recovery target? Cite the document ID."
 DOCS = (
     ("doc-orion-2024", "Orion 2024 plan: Quartz storage engine. Recovery target: 6 hours."),
@@ -64,6 +65,7 @@ def search_local_corpus(query: str) -> str:
         ranked.append((overlap, doc_id, body))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     results = [{"id": doc_id, "text": body} for score, doc_id, body in ranked if score > 0][:3]
+
     return json.dumps(results, ensure_ascii=False)
 
 
@@ -71,111 +73,9 @@ def _utc() -> datetime:
     return datetime.now(UTC)
 
 
-def _json_bytes(value: Any) -> bytes:
-    return (json.dumps(value, ensure_ascii=False, sort_keys=True, default=str) + "\n").encode()
-
-
 def _estimate_usd(prompt_tokens: int, completion_tokens: int) -> float:
     # Full uncached text rates. These are a conservative estimate for this tiny run.
     return prompt_tokens * 0.10 / 1_000_000 + completion_tokens * 0.50 / 1_000_000
-
-
-def _pull_pages(
-    fetch: Any, *, trace_id: str, fields: str, start: datetime, end: datetime, score: bool
-) -> list[dict[str, Any]]:
-    pages: list[dict[str, Any]] = []
-    cursor = None
-    while True:
-        kwargs: dict[str, Any] = {
-            "trace_id": trace_id,
-            "fields": fields,
-            "limit": 100,
-            "cursor": cursor,
-        }
-        if score:
-            kwargs.update(from_timestamp=start, to_timestamp=end)
-        else:
-            kwargs.update(from_start_time=start, to_start_time=end)
-        page = json.loads(fetch(**kwargs).json())
-        pages.append(page)
-        cursor = page["meta"].get("cursor")
-        if cursor is None:
-            return pages
-        if len(pages) >= 20:
-            raise RuntimeError("pagination limit reached; snapshot left incomplete")
-
-
-def _save_snapshot(
-    langfuse: Any,
-    trace_id: str,
-    expected_ids: set[str],
-    started: datetime,
-    ended: datetime,
-    run_dir: Path,
-    expected_score_ids: set[str] | None = None,
-) -> Path:
-    start, end = started - timedelta(seconds=5), ended + timedelta(seconds=5)
-    observations = []
-    for attempt in range(5):
-        observations = _pull_pages(
-            langfuse.api.observations.get_many,
-            trace_id=trace_id,
-            fields="core,basic,io,metadata,model",
-            start=start,
-            end=end,
-            score=False,
-        )
-        found_ids = {row["id"] for page in observations for row in page["data"]}
-        if expected_ids <= found_ids:
-            break
-        if attempt < 4:
-            time.sleep(1)
-    expected_score_ids = expected_score_ids or set()
-    scores = []
-    for attempt in range(10):
-        scores = _pull_pages(
-            langfuse.api.scores_v3.get_many_v3,
-            trace_id=trace_id,
-            fields="details,subject",
-            start=start,
-            end=end,
-            score=True,
-        )
-        found_scores = {row["id"] for page in scores for row in page["data"]}
-        if expected_score_ids <= found_scores:
-            break
-        if attempt < 9:
-            time.sleep(0.5)
-    if not expected_ids <= found_ids:
-        raise RuntimeError(
-            "Langfuse has not returned every expected observation; capture remains private"
-        )
-    if not expected_score_ids <= found_scores:
-        raise RuntimeError(
-            "Langfuse has not returned every expected score; capture remains private"
-        )
-    snapshot = run_dir / "snapshot"
-    snapshot.mkdir(mode=0o700)
-    manifest = {
-        "schema_version": SNAPSHOT_SCHEMA,
-        "source": "langfuse",
-        "observations_api": "v2",
-        "scores_api": "v3",
-        "observation_fields": ["core", "basic", "io", "metadata", "model"],
-        "score_fields": ["details", "subject"],
-        "query": {"fromStartTime": start.isoformat(), "toStartTime": end.isoformat()},
-        "score_query": {"fromTimestamp": start.isoformat(), "toTimestamp": end.isoformat()},
-        "complete": True,
-        "trace_id_filter": trace_id,
-    }
-    _private_bytes(snapshot / "manifest.json", _json_bytes(manifest))
-    _private_bytes(
-        snapshot / "observations.jsonl", b"".join(_json_bytes(page) for page in observations)
-    )
-    _private_bytes(snapshot / "scores.jsonl", b"".join(_json_bytes(page) for page in scores))
-    _private_bytes(snapshot / "capture.jsonl", (run_dir / "capture.jsonl").read_bytes())
-    read_snapshot(snapshot)
-    return snapshot
 
 
 def main() -> None:
@@ -185,6 +85,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     out = args.out.absolute()
+
     if out.exists() or not out.parent.is_dir():
         parser.error("--out must be a new directory under an existing parent")
 
@@ -196,6 +97,7 @@ def main() -> None:
     langfuse = get_client()
     if not langfuse.auth_check():
         raise RuntimeError("local Langfuse authentication failed; no model call made")
+
     client = OpenAI(max_retries=0, timeout=20.0)
     out.mkdir(mode=0o700)
     capture = CaptureWriter(out / "capture.jsonl")
@@ -224,6 +126,7 @@ def main() -> None:
             for turn in range(MAX_CALLS):
                 if _estimate_usd(**totals) >= MAX_ESTIMATED_USD:
                     raise RuntimeError("estimated cost ceiling reached")
+
                 capture_id = capture.begin_decision(messages=messages, tools=[TOOL])
                 with langfuse.start_as_current_observation(
                     as_type="generation",
@@ -266,6 +169,7 @@ def main() -> None:
                             }
                         )
                     generation.update(output=assistant)
+
                 calls = assistant.get("tool_calls") or []
                 if turn == 0:
                     if len(calls) != 1 or calls[0]["function"]["name"] != "search_local_corpus":
@@ -286,6 +190,7 @@ def main() -> None:
                         observation_id=tool_observation.id,
                         value=result,
                     )
+
                     messages = [
                         *messages,
                         assistant,
@@ -305,6 +210,7 @@ def main() -> None:
     snapshot = _save_snapshot(langfuse, trace_id, expected_ids, started, ended, out)
     archive = out / "archive"
     ingest_snapshot(snapshot, archive)
+
     summary = {
         "trace_id": trace_id,
         "model": MODEL,

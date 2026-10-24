@@ -27,7 +27,7 @@ jobs:
       - name: Test
         run: uv run --locked python -m unittest discover -s tests -v
       - name: CLI
-        run: uv run --locked trailgate doctor --source langfuse --input examples/synthetic_snapshot
+        run: uv run --locked trailgate doctor --source langfuse --input examples/synthetic/snapshot
       - name: Build
         run: uv build
       - name: Public files

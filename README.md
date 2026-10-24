@@ -2,11 +2,21 @@
 
 **Stitch agent traces into auditable trajectories and export eligible training data, starting with Langfuse.**
 
-See the [Japanese README](README.ja.md) and [roadmap to v1.0.0](ROADMAP.md) for the current preview scope and planned release gates.
+See the [Japanese README](README.ja.md) and [roadmap to v1.0.0](docs/ROADMAP.md) for the current preview scope and planned release gates.
 
 Trailgate is an early local-first Python CLI and library for preparing agent trajectories. It imports saved [Langfuse Observations API v2 and Scores API v3](https://langfuse.com/docs/api-and-data-platform/features/public-api) response pages, retains their original bytes, and reports which generation decisions have enough capture evidence for a faithful SFT projection.
 
 The core CLI is an **offline prototype**. Separate opt-in examples can run a fictional local search and a bounded multi-hop QA diagnostic against an official MuSiQue train corpus. These examples record private trajectories in a self-hosted Langfuse instance. Structural capture checks do not establish answer correctness or training rights.
+
+## Project layout
+
+| Location | Purpose |
+|---|---|
+| `src/trailgate/` | Offline snapshot validation, archive storage, capture, audit, export, and CLI |
+| `examples/synthetic/` | Fictional input and rights fixture for reproducible local checks |
+| `examples/live/` | Explicitly run model and Langfuse diagnostics; shared corpus and snapshot helpers |
+| `tests/` | Offline regression tests |
+| `docs/` | [Roadmap](docs/ROADMAP.md) and [release checklist](docs/RELEASING.md) |
 
 ## Try the synthetic example
 
@@ -14,12 +24,12 @@ The project pins Python 3.12.13 in `.python-version`. From the repository root, 
 
 ```sh
 uv sync --locked
-uv run trailgate doctor --source langfuse --input examples/synthetic_snapshot
-uv run trailgate ingest langfuse-api-snapshot examples/synthetic_snapshot --out ./private-example
+uv run trailgate doctor --source langfuse --input examples/synthetic/snapshot
+uv run trailgate ingest langfuse-api-snapshot examples/synthetic/snapshot --out ./private-example
 uv run trailgate report ./private-example
 uv run trailgate inspect ./private-example --trace trace-example
 uv run trailgate export steps ./private-example --out ./private-steps.jsonl
-uv run trailgate export sft ./private-example --rights-file examples/synthetic_rights.json --use internal_training --out ./private-sft.jsonl
+uv run trailgate export sft ./private-example --rights-file examples/synthetic/rights.json --use internal_training --out ./private-sft.jsonl
 ```
 
 The `private-*` outputs are ignored by Git. The archive directory is created with mode `0700`; raw and derived files use `0600`. Trailgate refuses to overwrite an existing archive or export.
@@ -33,13 +43,13 @@ The live examples are separate from the CLI and are never run by tests. They use
 ```sh
 uv sync --locked --extra live
 uv run --offline --locked --extra live --env-file local-langfuse.env \
-  python examples/live_langfuse_smoke.py --out private-live-run
+  python examples/live/live_langfuse_smoke.py --out private-live-run
 uv run --offline --locked trailgate report private-live-run/archive
 ```
 
 The example performs at most **two** `gpt-6-luna` Chat Completions requests, with at most 256 completion tokens each and retries disabled. Its only tool is a deterministic search over four fictional notes; no paid retrieval tool is involved. It checks Langfuse authentication before any model call. The code stops if the measured token cost estimate reaches $0.01 between calls; this is an estimate based on full uncached text rates, not a provider billing cap. A failed or timed-out call may have an unknown charge. The output directory is private and contains the full provider responses, exact model request messages, tool delivery, Langfuse API snapshot, and Trailgate archive. It contains **no API key**. Review the contents before sharing. The `rights_status` is diagnostic only; do not export it as training data without an independent rights decision.
 
-For multi-hop QA, `examples/live_musique_pilot.py` runs six frozen 2-, 3-, and 4-hop MuSiQue-Ans **train** questions against a frozen local SQLite FTS5 index, using `search`, `read`, and literal `grep`. `examples/live_musique_responses.py` runs a separate Responses API diagnostic. Both verify source and index hashes before calling a model, impose per-task action and token limits, and keep task answers and official support labels out of model inputs. Supply the official MuSiQue ZIP, the frozen index, and the task-ID manifest with `--archive`, `--db`, and `--task-manifest`; use `--out` for a new private directory. These examples are diagnostic harnesses, not benchmark scores or a general MCP implementation.
+For multi-hop QA, `examples/live/live_musique_pilot.py` runs six frozen 2-, 3-, and 4-hop MuSiQue-Ans **train** questions against a frozen local SQLite FTS5 index, using `search`, `read`, and literal `grep`. `examples/live/live_musique_responses.py` runs a separate Responses API diagnostic. Both verify source and index hashes before calling a model, impose per-task action and token limits, and keep task answers and official support labels out of model inputs. Supply the official MuSiQue ZIP, the frozen index, and the task-ID manifest with `--archive`, `--db`, and `--task-manifest`; use `--out` for a new private directory. These examples are diagnostic harnesses, not benchmark scores or a general MCP implementation.
 
 The Responses API example preserves provider-native request and response items, including encrypted reasoning items needed for stateless replay. Trailgate audits their capture structure but currently **does not export them as Chat SFT rows**. The MuSiQue outputs are marked `not_attested; diagnostic only`: no real-data training or redistribution is asserted. Gold-string presence is a weak diagnostic; evidence sufficiency and semantic correctness require separate review.
 
@@ -103,6 +113,6 @@ uv build
 uv run --locked python scripts/check_public_files.py
 ```
 
-The synthetic fixture and local pilot establish only the documented v0.1.0 capture and audit behavior. The next milestone is a canonical episode graph; [ROADMAP.md](ROADMAP.md) lists its acceptance gates. Design history and the broader retrieval-subagent research plan live outside this code repository.
+The synthetic fixture and local pilot establish only the documented v0.1.0 capture and audit behavior. The next milestone is a canonical episode graph; [docs/ROADMAP.md](docs/ROADMAP.md) lists its acceptance gates. Design history and the broader retrieval-subagent research plan live outside this code repository.
 
 MIT licensed. See [LICENSE](LICENSE).

@@ -27,11 +27,13 @@ The core package does not run models, fine-tune them, judge answer quality, or s
 
 Milestones are gates, not calendar dates. A preview may ship with explicit limitations; v1.0.0 waits for the reliability and contract gates. Features can move between pre-1.0 versions, but the exit gates for provenance, completeness, privacy, and reproducibility must remain.
 
-## First three implementation slices
+## Current state and next implementation slices
 
-1. **Preview release hygiene:** inspect built wheel/sdist and Git candidate files, provide a safe synthetic end-to-end quickstart and a release checklist, run lint, tests, build, and publication checks from a clean source copy, then make the authorized initial commit. Push, tag, and package publication require their own release decision.
-2. **Episode schema and fixtures:** define canonical event JSON Schema and state transitions; add pathological synthetic snapshots before writing a broad stitcher. Keep `candidate` (structural) separate from `quality` and `rights` in both report and API names.
-3. **Collector specification:** write a bounded v2/v3 pull contract with cursor, idempotency key, incomplete-page recovery, delayed-score revision, and credential handling, then implement the smallest read-only vertical slice.
+The v0.1.0 source preview has a synthetic quickstart, release checklist, lint and unit checks, build checks, and an initial commit. A package release has not been made.
+
+1. **Episode schema and fixtures:** define canonical event JSON Schema and state transitions; add pathological synthetic snapshots before writing a broad stitcher. Keep `candidate` (structural) separate from `quality` and `rights` in both report and API names.
+2. **Collector specification:** write a bounded v2/v3 pull contract with cursor, idempotency key, incomplete-page recovery, delayed-score revision, and credential handling, then implement the smallest read-only vertical slice.
+3. **Capture hardening:** make begin/finish/abort and delivered-result boundaries explicit, then test interrupted and concurrent writes before treating them as complete decisions.
 
 ## v1 release rules
 
