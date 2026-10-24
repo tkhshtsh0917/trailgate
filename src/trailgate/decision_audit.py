@@ -8,7 +8,8 @@ from typing import Any
 
 from .archive import read_archive
 from .chat_shape import valid_message, valid_tool_call, valid_tool_schema
-from .snapshot_input import SnapshotError, _jsonl
+from .observation_time import validate_observation_times
+from .snapshot_input import SNAPSHOT_SCHEMA, SnapshotError, _jsonl
 
 
 def _capture_events(archive: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -197,10 +198,21 @@ def _decision(
     captures: dict[str, list[dict[str, Any]]],
     linked: Counter[str],
     observations_by_id: dict[str, dict[str, Any]],
+    require_timezone: bool,
 ) -> dict[str, Any]:
     reasons: list[str] = []
     if row.get("end_time") is None:
         reasons.append("incomplete_generation")
+    else:
+        try:
+            validate_observation_times(
+                row.get("start_time"),
+                row["end_time"],
+                f"generation {row['id']}",
+                require_timezone=require_timezone,
+            )
+        except SnapshotError:
+            reasons.append("invalid_generation_time")
 
     metadata = row.get("metadata")
     capture_id = metadata.get("trailgate_capture_id") if isinstance(metadata, dict) else None
@@ -249,6 +261,7 @@ def _decision(
     reasons = list(dict.fromkeys(reasons))
     return {
         "observation_id": row["id"],
+        "_project_id": row["project_id"],
         "trace_id": row["trace_id"],
         "capture_id": capture_id,
         "candidate": not reasons,
@@ -272,7 +285,13 @@ def audit(path: str | Path) -> dict[str, Any]:
     observations_by_id = {row["id"]: row for row in observations}
 
     decisions = [
-        _decision(row, captures, linked, observations_by_id)
+        _decision(
+            row,
+            captures,
+            linked,
+            observations_by_id,
+            archive["index"]["source_schema"] == SNAPSHOT_SCHEMA,
+        )
         for row in observations
         if row.get("type") == "GENERATION"
     ]

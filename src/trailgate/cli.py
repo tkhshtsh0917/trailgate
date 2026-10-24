@@ -78,6 +78,8 @@ def _parser() -> argparse.ArgumentParser:
     pull.add_argument("--project-id", required=True)
     pull.add_argument("--from-time", required=True)
     pull.add_argument("--to-time", required=True)
+    pull.add_argument("--score-from-time")
+    pull.add_argument("--score-to-time")
     pull.add_argument("--trace-id")
     pull.add_argument("--observation-fields", default="core,basic,io,metadata,model")
     pull.add_argument("--score-fields", default="details,subject")
@@ -164,6 +166,8 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> d
             project_id=args.project_id,
             from_time=args.from_time,
             to_time=args.to_time,
+            score_from_time=args.score_from_time,
+            score_to_time=args.score_to_time,
             observation_fields=tuple(args.observation_fields.split(",")),
             score_fields=tuple(args.score_fields.split(",")),
             trace_id=args.trace_id,

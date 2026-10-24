@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .archive import _validate_index
+from .archive import _validate_index, read_archive
 from .dataset_policy import read_dataset_policy
 from .decision_audit import audit
 from .exports import _check_rights
@@ -14,7 +14,10 @@ from .snapshot_input import SnapshotError, _read_json
 
 
 def _decision_gates(
-    decision: dict[str, Any], approved: set[str], splits: dict[str, dict[str, str]]
+    decision: dict[str, Any],
+    approved: set[str],
+    splits: dict[str, dict[str, str]],
+    isolated_traces: set[tuple[str, str]],
 ) -> dict[str, Any]:
     split = splits.get(decision["trace_id"])
     gates = {
@@ -25,6 +28,8 @@ def _decision_gates(
         "privacy_reviewed": True,
         "split_recorded": split is not None,
         "training_split": bool(split and split["split"] == "train"),
+        "session_scope_isolated": (decision["_project_id"], decision["trace_id"])
+        in isolated_traces,
     }
     reasons = [f"structural:{reason}" for reason in decision["reasons"]]
     reasons.extend(f"gate:{name}" for name, passed in gates.items() if not passed)
@@ -36,6 +41,40 @@ def _decision_gates(
         "reasons": reasons,
         "split": split,
     }
+
+
+def _isolated_traces(
+    observations: list[dict[str, Any]], splits: dict[str, dict[str, str]]
+) -> set[tuple[str, str]]:
+    """Reject known session peers with missing or different task/split evidence."""
+    sessions: dict[tuple[str, str], set[str]] = {}
+    trace_sessions: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    trace_projects: dict[str, set[str]] = {}
+    traces: set[tuple[str, str]] = set()
+    for row in observations:
+        scope = (row["project_id"], row["trace_id"])
+        traces.add(scope)
+        trace_projects.setdefault(row["trace_id"], set()).add(row["project_id"])
+        if isinstance(row.get("session_id"), str) and row["session_id"]:
+            session = (row["project_id"], row["session_id"])
+            sessions.setdefault(session, set()).add(row["trace_id"])
+            trace_sessions.setdefault(scope, set()).add(session)
+
+    isolated = set()
+    for scope in traces:
+        project_id, trace_id = scope
+        own_split = splits.get(trace_id)
+        if len(trace_projects[trace_id]) != 1 or own_split is None:
+            continue
+        if all(
+            all(
+                len(trace_projects[peer]) == 1 and splits.get(peer) == own_split
+                for peer in sessions[session]
+            )
+            for session in trace_sessions.get((project_id, trace_id), ())
+        ):
+            isolated.add(scope)
+    return isolated
 
 
 def assess_dataset(
@@ -58,7 +97,9 @@ def assess_dataset(
     if not approved <= known_ids:
         raise SnapshotError("quality approval references an unknown generation")
     splits = {item["trace_id"]: item for item in policy["splits"]}
-    evaluations = [_decision_gates(item, approved, splits) for item in decisions]
+    observations = read_archive(archive_path)["observations"]
+    isolated_traces = _isolated_traces(observations, splits)
+    evaluations = [_decision_gates(item, approved, splits, isolated_traces) for item in decisions]
     reason_counts: Counter[str] = Counter()
     for item in evaluations:
         if not item["eligible_for_chat_sft"]:

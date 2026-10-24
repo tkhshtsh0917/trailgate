@@ -158,6 +158,46 @@ class DatasetExportTests(unittest.TestCase):
             export_dataset(self.archive, self.rights, self.policy, "internal_training", destination)
         self.assertFalse(destination.exists())
 
+    def test_cross_split_session_prefix_is_not_exported(self) -> None:
+        observations = self.source / "observations.jsonl"
+        page = json.loads(observations.read_text())
+        for row in page["data"]:
+            if row["id"] in {"root", "tool-search", "gen-search"}:
+                row["traceId"] = "test-trace"
+        observations.write_text(json.dumps(page) + "\n")
+        self._prepare()
+        self._rewrite_policy(
+            lambda data: data["splits"].extend(
+                [
+                    {"trace_id": "test-trace", "task_id": "test-task", "split": "test"},
+                    {"trace_id": "trace-example", "task_id": "train-task", "split": "train"},
+                ]
+            )
+        )
+        self._rewrite_policy(lambda data: data["splits"].pop(0))
+
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 0)
+        self.assertEqual(preview["rejected_reasons"]["gate:session_scope_isolated"], 2)
+
+        destination = self.root / "dataset"
+        result = export_dataset(
+            self.archive, self.rights, self.policy, "internal_training", destination
+        )
+        self.assertEqual(result["eligible_chat_sft"], 0)
+        self.assertEqual((destination / "chat_sft.jsonl").read_bytes(), b"")
+
+    def test_unassigned_session_peer_blocks_training_view(self) -> None:
+        observations = self.source / "observations.jsonl"
+        page = json.loads(observations.read_text())
+        next(row for row in page["data"] if row["id"] == "root")["traceId"] = "unknown-trace"
+        observations.write_text(json.dumps(page) + "\n")
+        self._prepare()
+
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 0)
+        self.assertEqual(preview["rejected_reasons"]["gate:session_scope_isolated"], 2)
+
     def test_responses_payload_remains_in_generic_episode_only(self) -> None:
         def responses(events):
             for event in events:

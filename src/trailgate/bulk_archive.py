@@ -17,6 +17,7 @@ from typing import Any
 
 from .archive import _validate_index
 from .blob_manifest import BLOB_SOURCE_SCHEMA, object_file, read_blob_manifest
+from .observation_time import validate_observation_times
 from .private_io import _private_bytes
 from .snapshot_input import SnapshotError, _parse_json
 
@@ -112,6 +113,12 @@ def _observation(row: dict[str, Any], entry: dict[str, Any], index: int) -> dict
     required = ("id", "trace_id", "project_id", "start_time", "type")
     if not all(isinstance(row.get(key), str) and row[key] for key in required):
         raise SnapshotError("blob observation is missing core fields")
+    validate_observation_times(
+        row["start_time"],
+        row.get("end_time"),
+        f"blob observation {row['id']}",
+        require_timezone=False,
+    )
     return {
         "id": row["id"],
         "trace_id": row["trace_id"],

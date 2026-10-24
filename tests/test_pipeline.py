@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -304,10 +305,55 @@ class PipelineTests(unittest.TestCase):
     def test_row_outside_declared_query_range_is_rejected(self) -> None:
         self._rewrite_pages(
             "observations.jsonl",
-            lambda page: page["data"][0].update(startTime="2026-10-03T00:00:00Z"),
+            lambda page: page["data"][0].update(
+                startTime="2026-10-03T00:00:00Z", endTime="2026-10-03T00:00:01Z"
+            ),
         )
         with self.assertRaisesRegex(SnapshotError, "outside declared query range"):
             read_snapshot(self.source)
+
+    def test_invalid_generation_end_time_never_enters_archive(self) -> None:
+        for end_time in ("", 123, "tomorrow", "2026-09-30T00:00:00Z", "2026-10-01"):
+            with self.subTest(end_time=end_time):
+                self._rewrite_pages(
+                    "observations.jsonl",
+                    lambda page, value=end_time: next(
+                        row for row in page["data"] if row["id"] == "gen-answer"
+                    ).update(endTime=value),
+                )
+                with self.assertRaises(SnapshotError):
+                    read_snapshot(self.source)
+                shutil.copyfile(FIXTURE / "observations.jsonl", self.source / "observations.jsonl")
+        self.assertFalse(self.archive.exists())
+
+    def test_existing_archive_with_invalid_end_time_is_not_a_candidate(self) -> None:
+        ingest_snapshot(self.source, self.archive)
+        observations = self.archive / "observations.jsonl"
+        rows = [json.loads(line) for line in observations.read_text().splitlines()]
+        next(row for row in rows if row["id"] == "gen-answer")["end_time"] = ""
+        observations.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        index_path = self.archive / "index.json"
+        index = json.loads(index_path.read_text())
+        index["derived_hashes"]["observations.jsonl"] = hashlib.sha256(
+            observations.read_bytes()
+        ).hexdigest()
+        index_path.write_text(json.dumps(index))
+
+        report = public_report(self.archive)
+        answer = next(row for row in report["decisions"] if row["observation_id"] == "gen-answer")
+        self.assertFalse(answer["candidate"])
+        self.assertIn("invalid_generation_time", answer["reasons"])
+
+    def test_open_generation_remains_incomplete(self) -> None:
+        self._rewrite_pages(
+            "observations.jsonl",
+            lambda page: next(row for row in page["data"] if row["id"] == "gen-answer").update(
+                endTime=None
+            ),
+        )
+        ingest_snapshot(self.source, self.archive)
+        report = public_report(self.archive)
+        self.assertEqual(report["reason_counts"]["incomplete_generation"], 1)
 
     def test_rights_gate_blocks_export(self) -> None:
         ingest_snapshot(self.source, self.archive)

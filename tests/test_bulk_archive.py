@@ -158,6 +158,16 @@ class BulkArchiveTests(unittest.TestCase):
         index = ingest_blob_export(self.objects, self.manifest_path, self.root / "archive")
         self.assertEqual((index["observations"], index["scores"]), (2, 1))
 
+    def test_invalid_blob_end_time_is_rejected(self) -> None:
+        for index, end_time in enumerate(("", "not-a-time", "2026-09-30 00:00:00.000000")):
+            with self.subTest(end_time=end_time):
+                self.obs[0]["end_time"] = end_time
+                self._write_manifest()
+                with self.assertRaises(SnapshotError):
+                    ingest_blob_export(
+                        self.objects, self.manifest_path, self.root / f"archive-{index}"
+                    )
+
     def test_missing_file_or_incomplete_manifest_fails_before_destination(self) -> None:
         manifest = json.loads(self.manifest_path.read_text())
         manifest["files"] = manifest["files"][:1]

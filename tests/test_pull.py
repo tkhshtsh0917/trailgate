@@ -4,6 +4,8 @@ import json
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -97,6 +99,13 @@ class PullTests(unittest.TestCase):
         )
         sleep.assert_called_once()
 
+        widened = PullSpec(**{**self.spec.__dict__, "score_to_time": "2026-10-04T00:00:00Z"})
+        with patch.object(module.urllib.request, "build_opener", return_value=Opener()):
+            module._request_page(widened, "scores", None, self.credentials)
+        params = urllib.parse.parse_qs(urllib.parse.urlsplit(requests[-1].full_url).query)
+        self.assertEqual(params["toTimestamp"], ["2026-10-04T00:00:00Z"])
+        self.assertNotIn("toStartTime", params)
+
     def test_paginated_pull_matches_offline_source_rows(self) -> None:
         destination = self.root / "pull"
         with patch.object(module, "_request_page", side_effect=self._page):
@@ -132,6 +141,9 @@ class PullTests(unittest.TestCase):
                 pull_snapshot(self.spec, destination, self.credentials)
         self.assertFalse((destination / "manifest.json").exists())
         self.assertEqual(len(list((destination / "pages" / "observations").glob("*.json"))), 1)
+        saved_spec = json.loads((destination / "pull.json").read_text())["spec"]
+        self.assertNotIn("score_from_time", saved_spec)
+        self.assertNotIn("score_to_time", saved_spec)
 
         with patch.object(module, "_request_page", side_effect=self._page):
             result = pull_snapshot(self.spec, destination, self.credentials, resume=True)
@@ -141,6 +153,53 @@ class PullTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(SnapshotError, "existing incomplete"):
             pull_snapshot(self.spec, destination, self.credentials, resume=True)
+
+    def test_resume_rejects_materialized_rows_different_from_saved_pages(self) -> None:
+        for table in ("observations", "scores"):
+            with self.subTest(table=table):
+                destination = self.root / f"pull-{table}"
+                original = module._atomic_private_bytes
+
+                def interrupt(path, data, original_write=original):
+                    if path.name == "manifest.json":
+                        raise SnapshotError("fictional interruption after materialization")
+                    return original_write(path, data)
+
+                with (
+                    patch.object(module, "_request_page", side_effect=self._page),
+                    patch.object(module, "_atomic_private_bytes", side_effect=interrupt),
+                ):
+                    with self.assertRaisesRegex(SnapshotError, "fictional interruption"):
+                        pull_snapshot(self.spec, destination, self.credentials)
+
+                materialized = destination / f"{table}.jsonl"
+                pages = [json.loads(line) for line in materialized.read_text().splitlines()]
+                pages[0]["data"][0]["name"] = "fictional-tampered-name"
+                materialized.write_text("\n".join(json.dumps(page) for page in pages) + "\n")
+                with patch.object(module, "_request_page", side_effect=self._page):
+                    with self.assertRaisesRegex(SnapshotError, "differs from saved pages"):
+                        pull_snapshot(self.spec, destination, self.credentials, resume=True)
+                self.assertFalse((destination / "manifest.json").exists())
+
+    def test_resume_accepts_matching_materialized_pages(self) -> None:
+        destination = self.root / "pull"
+        original = module._atomic_private_bytes
+
+        def interrupt(path, data):
+            if path.name == "manifest.json":
+                raise SnapshotError("fictional interruption after materialization")
+            return original(path, data)
+
+        with (
+            patch.object(module, "_request_page", side_effect=self._page),
+            patch.object(module, "_atomic_private_bytes", side_effect=interrupt),
+        ):
+            with self.assertRaisesRegex(SnapshotError, "fictional interruption"):
+                pull_snapshot(self.spec, destination, self.credentials)
+        with patch.object(module, "_request_page", side_effect=self._page) as request:
+            result = pull_snapshot(self.spec, destination, self.credentials, resume=True)
+        request.assert_not_called()
+        self.assertEqual(result["observations"], 4)
 
     def test_delayed_score_reconciliation_creates_new_snapshot(self) -> None:
         self.scores = []
@@ -161,6 +220,42 @@ class PullTests(unittest.TestCase):
         self.assertEqual(second_result["revision_of_snapshot_id"], first_result["snapshot_id"])
         self.assertEqual(read_archive(archive)["index"]["source_hashes"], original_hashes)
         self.assertEqual(second_result["scores"], 1)
+
+    def test_later_score_timestamp_can_be_reconciled_with_wider_score_window(self) -> None:
+        delayed = {**SCORES[0], "timestamp": "2026-10-03T01:00:00Z"}
+
+        def filtered_page(spec, table, cursor, credentials):
+            if table == "scores":
+                start, end = module._score_bounds(spec)
+                scored_at = datetime.fromisoformat(delayed["timestamp"].replace("Z", "+00:00"))
+                lower = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                upper = datetime.fromisoformat(end.replace("Z", "+00:00"))
+                self.scores = [delayed] if lower <= scored_at < upper else []
+            return self._page(spec, table, cursor, credentials)
+
+        first = self.root / "first"
+        with patch.object(module, "_request_page", side_effect=filtered_page):
+            initial = pull_snapshot(self.spec, first, self.credentials)
+        self.assertEqual(initial["scores"], 0)
+        archive = self.root / "archive"
+        ingest_snapshot(first, archive)
+
+        widened = PullSpec(**{**self.spec.__dict__, "score_to_time": "2026-10-04T00:00:00Z"})
+        second = self.root / "second"
+        with patch.object(module, "_request_page", side_effect=filtered_page):
+            result = pull_snapshot(widened, second, self.credentials, previous_archive=archive)
+        self.assertEqual(result["scores"], 1)
+        self.assertEqual(result["revision_of_snapshot_id"], initial["snapshot_id"])
+        self.assertEqual(
+            read_snapshot(second)["manifest"]["score_query"]["toTimestamp"],
+            "2026-10-04T00:00:00Z",
+        )
+
+        narrowed = PullSpec(**{**self.spec.__dict__, "score_to_time": "2026-10-01T12:00:00Z"})
+        with self.assertRaisesRegex(SnapshotError, "previous pull scope differs"):
+            pull_snapshot(
+                narrowed, self.root / "narrowed", self.credentials, previous_archive=archive
+            )
 
     def test_revision_rejects_different_prior_scope(self) -> None:
         first = self.root / "first"

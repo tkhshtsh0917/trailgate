@@ -13,6 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .errors import SnapshotError
+from .observation_time import validate_observation_times
+
 SNAPSHOT_SCHEMA = "trailgate.langfuse_api_snapshot.v1"
 MAX_API_SNAPSHOT_BYTES = 64 * 1024 * 1024
 OBSERVATION_FIELDS = {
@@ -64,10 +67,6 @@ SCORE_FIELDS = {
     "authorUserId",
     "queueId",
 }
-
-
-class SnapshotError(ValueError):
-    """The snapshot cannot be interpreted without guessing."""
 
 
 def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -236,11 +235,10 @@ def _validate_observations(
             for key in ("traceId", "startTime", "projectId", "type")
         ):
             raise SnapshotError(f"observation {row['id']}: invalid core field")
-        try:
-            started = datetime.fromisoformat(row["startTime"].replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise SnapshotError(f"observation {row['id']}: invalid startTime") from exc
-        if started.tzinfo is None or not query_range[0] <= started < query_range[1]:
+        started = validate_observation_times(
+            row["startTime"], row.get("endTime"), f"observation {row['id']}", require_timezone=True
+        )
+        if not query_range[0] <= started < query_range[1]:
             raise SnapshotError(f"observation {row['id']}: outside declared query range")
 
 

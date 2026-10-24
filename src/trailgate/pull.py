@@ -55,6 +55,27 @@ class PullSpec:
     limit: int = 100
     max_pages: int = 1000
     timeout_seconds: float = 20.0
+    score_from_time: str | None = None
+    score_to_time: str | None = None
+
+
+def _score_bounds(spec: PullSpec) -> tuple[str, str]:
+    return (
+        spec.from_time if spec.score_from_time is None else spec.score_from_time,
+        spec.to_time if spec.score_to_time is None else spec.score_to_time,
+    )
+
+
+def _parse_bound(value: str) -> datetime:
+    if not isinstance(value, str):
+        raise SnapshotError("invalid pull time range")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SnapshotError("invalid pull time range") from exc
+    if parsed.tzinfo is None:
+        raise SnapshotError("pull time bounds require timezones")
+    return parsed
 
 
 def _validate_spec(spec: PullSpec) -> None:
@@ -86,12 +107,9 @@ def _validate_spec(spec: PullSpec) -> None:
             raise SnapshotError("field groups must be nonempty names")
     if "core" not in spec.observation_fields:
         raise SnapshotError("observation fields must include core")
-    try:
-        start = datetime.fromisoformat(spec.from_time.replace("Z", "+00:00"))
-        end = datetime.fromisoformat(spec.to_time.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise SnapshotError("invalid pull time range") from exc
-    if start.tzinfo is None or end.tzinfo is None or start >= end:
+    start, end = _parse_bound(spec.from_time), _parse_bound(spec.to_time)
+    score_from, score_to = _score_bounds(spec)
+    if start >= end or _parse_bound(score_from) >= _parse_bound(score_to):
         raise SnapshotError("pull requires timezone-aware start < end")
 
 
@@ -104,6 +122,8 @@ def preview_pull(spec: PullSpec) -> dict[str, Any]:
         "project_id": spec.project_id,
         "from_time": spec.from_time,
         "to_time": spec.to_time,
+        "score_from_time": _score_bounds(spec)[0],
+        "score_to_time": _score_bounds(spec)[1],
         "trace_id": spec.trace_id,
         "observation_fields": list(spec.observation_fields),
         "score_fields": list(spec.score_fields),
@@ -117,13 +137,18 @@ def preview_pull(spec: PullSpec) -> dict[str, Any]:
 def _request_page(
     spec: PullSpec, table: str, cursor: str | None, credentials: tuple[str, str]
 ) -> bytes:
+    score_from, score_to = _score_bounds(spec)
     params = {
         "fields": ",".join(
             spec.observation_fields if table == "observations" else spec.score_fields
         ),
         "limit": str(spec.limit),
-        "fromStartTime" if table == "observations" else "fromTimestamp": spec.from_time,
-        "toStartTime" if table == "observations" else "toTimestamp": spec.to_time,
+        "fromStartTime" if table == "observations" else "fromTimestamp": (
+            spec.from_time if table == "observations" else score_from
+        ),
+        "toStartTime" if table == "observations" else "toTimestamp": (
+            spec.to_time if table == "observations" else score_to
+        ),
     }
     if spec.trace_id:
         params["traceId"] = spec.trace_id
@@ -305,6 +330,16 @@ def _materialize_pages(root: Path, table: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _verify_materialized(root: Path, table: str) -> None:
+    """Require an existing JSONL to be exactly the saved page projection."""
+    expected = hashlib.sha256()
+    for file in _page_files(root / "pages" / table):
+        expected.update(file.read_bytes().rstrip(b"\r\n") + b"\n")
+    target = root / f"{table}.jsonl"
+    if not target.is_file() or _hash_file(target) != expected.hexdigest():
+        raise SnapshotError(f"{table} materialization differs from saved pages")
+
+
 def _manifest(root: Path, spec: PullSpec, revision_of: str | None) -> dict[str, Any]:
     return {
         "schema_version": SNAPSHOT_SCHEMA,
@@ -314,7 +349,10 @@ def _manifest(root: Path, spec: PullSpec, revision_of: str | None) -> dict[str, 
         "observation_fields": list(spec.observation_fields),
         "score_fields": list(spec.score_fields),
         "query": {"fromStartTime": spec.from_time, "toStartTime": spec.to_time},
-        "score_query": {"fromTimestamp": spec.from_time, "toTimestamp": spec.to_time},
+        "score_query": {
+            "fromTimestamp": _score_bounds(spec)[0],
+            "toTimestamp": _score_bounds(spec)[1],
+        },
         "complete": True,
         "collection": {
             "schema_version": PULL_SCHEMA,
@@ -354,10 +392,17 @@ def _previous_snapshot_id(path: Path, spec: PullSpec) -> str:
         collection.get("project_id") == spec.project_id
         and collection.get("trace_id") == spec.trace_id
         and previous.get("query") == {"fromStartTime": spec.from_time, "toStartTime": spec.to_time}
-        and previous.get("score_query")
-        == {"fromTimestamp": spec.from_time, "toTimestamp": spec.to_time}
         and previous.get("observation_fields") == list(spec.observation_fields)
         and previous.get("score_fields") == list(spec.score_fields)
+    )
+    prior_scores = previous.get("score_query")
+    if not isinstance(prior_scores, dict):
+        raise SnapshotError("previous pull has invalid score scope")
+    score_from, score_to = _score_bounds(spec)
+    matching = matching and (
+        prior_scores.get("fromTimestamp") == score_from
+        and isinstance(prior_scores.get("toTimestamp"), str)
+        and _parse_bound(prior_scores["toTimestamp"]) <= _parse_bound(score_to)
     )
     if not matching:
         raise SnapshotError("previous pull scope differs from requested revision")
@@ -384,9 +429,14 @@ def pull_snapshot(
         if previous_archive is not None
         else None
     )
+    saved_spec = asdict(spec)
+    if spec.score_from_time is None:
+        saved_spec.pop("score_from_time")
+    if spec.score_to_time is None:
+        saved_spec.pop("score_to_time")
     spec_record = {
         "schema_version": PULL_SCHEMA,
-        "spec": asdict(spec),
+        "spec": saved_spec,
         "revision_of_snapshot_id": revision_of,
     }
     spec_bytes = (json.dumps(spec_record, sort_keys=True) + "\n").encode()
@@ -402,7 +452,9 @@ def pull_snapshot(
     for table in TABLES:
         _collect_table(spec, destination, table, credentials)
     for table in TABLES:
-        if not (destination / f"{table}.jsonl").exists():
+        if (destination / f"{table}.jsonl").exists():
+            _verify_materialized(destination, table)
+        else:
             _materialize_pages(destination, table)
 
     manifest = _manifest(destination, spec, revision_of)
