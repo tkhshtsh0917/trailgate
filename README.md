@@ -1,10 +1,10 @@
 # Trailgate
 
-**Stitch agent traces into auditable trajectories and export eligible training data, starting with Langfuse.**
+**Audit saved Langfuse decisions and prepare traceable Chat SFT candidates.**
 
 See the [Japanese README](README.ja.md) and [roadmap to v1.0.0](docs/ROADMAP.md) for the current preview scope and planned release gates.
 
-Trailgate is an early local-first Python CLI and library for preparing agent trajectories. It imports saved [Langfuse Observations API v2 and Scores API v3](https://langfuse.com/docs/api-and-data-platform/features/public-api) response pages, retains their original bytes, and reports which generation decisions have enough capture evidence for a faithful SFT projection.
+Trailgate is an early local-first Python CLI and library for preparing agent trajectories. It imports saved [Langfuse Observations API v2 and Scores API v3](https://langfuse.com/docs/api-and-data-platform/features/public-api) response pages, retains their original bytes, and reports which generation decisions have enough capture evidence for a supported Chat SFT projection.
 
 The core CLI is an **offline prototype**. Separate opt-in examples can run a fictional local search and a bounded multi-hop QA diagnostic against an official MuSiQue train corpus. These examples record private trajectories in a self-hosted Langfuse instance. Structural capture checks do not establish answer correctness or training rights.
 
@@ -32,7 +32,7 @@ uv run trailgate export steps ./private-example --out ./private-steps.jsonl
 uv run trailgate export sft ./private-example --rights-file examples/synthetic/rights.json --use internal_training --out ./private-sft.jsonl
 ```
 
-The `private-*` outputs are ignored by Git. The archive directory is created with mode `0700`; raw and derived files use `0600`. Trailgate refuses to overwrite an existing archive or export.
+The `private-*` outputs are ignored by Git. The archive directory is created with mode `0700`; raw and derived files use `0600`. Trailgate refuses to overwrite an existing archive or export. The supplied `rights.json` is bound to this exact synthetic snapshot ID. If you change any source page or capture event, create and review a new rights manifest for the new snapshot; do not reuse the fixture's attestation.
 
 The `uv run trailgate` command uses the package entry point in `pyproject.toml`.
 
@@ -62,12 +62,13 @@ The current audit treats each Langfuse `GENERATION` as a decision candidate. It 
 - a unique `trailgate_capture_id` in the generation's metadata;
 - exactly one locally captured pre-inference message list and tool list, including an explicit empty list when no tools were available;
 - exactly one captured assistant response;
+- for Chat SFT candidates, a text-only Chat message envelope, function-call envelope, and top-level function tool schema with required fields of the expected types;
 - tool calls that name a declared tool, with a matching locally recorded delivered result and a Langfuse `TOOL` observation in the same trace;
 - capture events in the order input → response → delivered tool result.
 
 The report lists rejection reasons per generation. A Langfuse observation's `input` field is **never assumed to be the exact model-visible prompt**. Scores are retained as separate evidence and are never inserted into the model's historical input.
 
-`faithful_candidates` means the structural capture checks passed. It is **not a quality score or a legal determination**. SFT export also requires an explicit use manifest that attests permission for task inputs, model outputs, and tool results. The example use manifest applies only to the fictional fixture. Tool messages and user messages remain context; the export's `target` identifies only the final assistant message for loss.
+`faithful_candidates` means the structural capture checks passed. It is **not a quality score or a legal determination**. SFT export also requires a self-attested use manifest with the archive's exact `snapshot_id` and permission for task inputs, model outputs, and tool results. Trailgate checks the declaration's presence and binding, but cannot verify its truth. The example use manifest applies only to the fictional fixture. Tool messages and user messages remain context; the export's `target` identifies only the final assistant message for loss.
 
 ## Capture at the model boundary
 
@@ -100,7 +101,7 @@ Capture is explicit because prompts, tool results, and user data can be sensitiv
 - Trace observations and scores are preserved with source row references and SHA-256 hashes. Session stitching, full episode boundaries, incremental API pulling, and score attribution are not implemented yet.
 - The capture helper provides an application-side assertion of model-visible state. Trailgate cannot independently prove that the application called it at the right point or that its rights declaration is accurate.
 - The capture writer currently expects one process to append to a sidecar. Concurrent writers, redaction, and authenticated capture records are future work.
-- The SFT projection preserves captured message objects and declares the target role. Model-specific chat templates, tokenization, loss masks, and on-policy RL rollout data are outside this prototype.
+- The SFT projection preserves captured message objects and declares the target role. It accepts the text/function-call Chat subset; multimodal parts, legacy function calls, and provider-specific message fields are excluded. The top-level tool envelope is checked, but full JSON Schema semantics, model-specific chat templates, tokenization, loss masks, and on-policy RL rollout data are outside this prototype.
 - Provider terms, third-party tool-result rights, redaction, and task-level splits require review before any real-data training or publication.
 
 ## Development

@@ -28,14 +28,14 @@ def _parser() -> argparse.ArgumentParser:
     ingest.add_argument("input", type=Path)
     ingest.add_argument("--out", type=Path, required=True)
 
-    report = commands.add_parser("report", help="Print a decision-level trainability report.")
+    report = commands.add_parser("report", help="Print a decision-level capture audit.")
     report.add_argument("archive", type=Path)
 
     inspect = commands.add_parser("inspect", help="Inspect observation structure for one trace.")
     inspect.add_argument("archive", type=Path)
     inspect.add_argument("--trace", required=True)
 
-    export = commands.add_parser("export", help="Export diagnostic steps or strict SFT examples.")
+    export = commands.add_parser("export", help="Export diagnostic steps or Chat SFT candidates.")
     export.add_argument("view", choices=["steps", "sft"])
     export.add_argument("archive", type=Path)
     export.add_argument("--out", type=Path, required=True)

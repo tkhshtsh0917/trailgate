@@ -33,6 +33,19 @@ class PipelineTests(unittest.TestCase):
         change(page)
         path.write_text(json.dumps(page) + "\n")
 
+    def _rewrite_capture(self, change) -> None:
+        path = self.source / "capture.jsonl"
+        events = [json.loads(line) for line in path.read_text().splitlines()]
+        change(events)
+        path.write_text("\n".join(json.dumps(event) for event in events) + "\n")
+
+    def _rights_for(self, archive_path: Path) -> Path:
+        rights = json.loads(RIGHTS.read_text())
+        rights["snapshot_id"] = json.loads((archive_path / "index.json").read_text())["snapshot_id"]
+        path = self.root / f"{archive_path.name}-rights.json"
+        path.write_text(json.dumps(rights))
+        return path
+
     def test_end_to_end_and_no_future_tool_result_in_earlier_prefix(self) -> None:
         index = ingest_snapshot(self.source, self.archive)
         self.assertEqual(index["observations"], 4)
@@ -59,7 +72,113 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("Synthetic evidence.", json.dumps(answer["messages"]))
         self.assertEqual(search["target"], "last_assistant_message")
         self.assertEqual(len(search["rights_ref"]["sha256"]), 64)
+        self.assertEqual(search["rights_ref"]["snapshot_id"], index["snapshot_id"])
         self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+
+    def test_malformed_chat_messages_do_not_become_candidates(self) -> None:
+        bad_messages = [
+            [],
+            ["not a chat message"],
+            [{"role": ["user"], "content": "Hello"}],
+            [{"role": "user", "content": ["unsupported content part"]}],
+            [{"role": "tool", "content": "Orphan result"}],
+        ]
+        for number, messages in enumerate(bad_messages):
+            with self.subTest(messages=messages):
+
+                def change(events, messages=messages):
+                    begin = next(
+                        event
+                        for event in events
+                        if event["capture_id"] == "cap-answer" and event["kind"] == "begin"
+                    )
+                    begin["messages"] = messages
+
+                self._rewrite_capture(change)
+                archive_path = self.root / f"bad-messages-{number}"
+                ingest_snapshot(self.source, archive_path)
+                report = public_report(archive_path)
+                self.assertEqual(report["faithful_candidates"], 1)
+                self.assertEqual(report["reason_counts"]["invalid_chat_messages"], 1)
+                self.assertEqual(
+                    export_sft(
+                        archive_path,
+                        self._rights_for(archive_path),
+                        "internal_training",
+                        self.root / f"bad-messages-{number}.jsonl",
+                    ),
+                    1,
+                )
+
+                shutil.copytree(FIXTURE, self.source, dirs_exist_ok=True)
+
+    def test_malformed_chat_tool_schema_and_output_block_export(self) -> None:
+        mutations = [
+            (
+                "bad-tool",
+                "begin",
+                "tools",
+                "invalid_tool_schema",
+                [{"type": "function", "function": {"name": "search", "parameters": "bad"}}],
+            ),
+            (
+                "bad-call",
+                "finish",
+                "assistant_message",
+                "invalid_chat_assistant_message",
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {"id": "call-1", "type": "function", "function": {"name": "search"}}
+                    ],
+                },
+            ),
+            (
+                "no-output",
+                "finish",
+                "assistant_message",
+                "invalid_chat_assistant_message",
+                {"role": "assistant"},
+            ),
+            (
+                "duplicate-tool-name",
+                "begin",
+                "tools",
+                "duplicate_tool_schema_name",
+                [
+                    {"type": "function", "function": {"name": "search"}},
+                    {"type": "function", "function": {"name": "search"}},
+                ],
+            ),
+        ]
+        for name, kind, field, reason, value in mutations:
+            with self.subTest(name=name):
+
+                def change(events, kind=kind, field=field, value=value):
+                    target = next(
+                        event
+                        for event in events
+                        if event["capture_id"] == "cap-search" and event["kind"] == kind
+                    )
+                    target[field] = value
+
+                self._rewrite_capture(change)
+                archive_path = self.root / name
+                ingest_snapshot(self.source, archive_path)
+                report = public_report(archive_path)
+                self.assertEqual(report["faithful_candidates"], 1)
+                self.assertEqual(report["reason_counts"][reason], 1)
+                self.assertEqual(
+                    export_sft(
+                        archive_path,
+                        self._rights_for(archive_path),
+                        "internal_training",
+                        self.root / f"{name}.jsonl",
+                    ),
+                    1,
+                )
+
+                shutil.copytree(FIXTURE, self.source, dirs_exist_ok=True)
 
     def test_missing_capture_link_is_not_inferred_from_langfuse_input(self) -> None:
         def remove_link(page):
@@ -83,6 +202,17 @@ class PipelineTests(unittest.TestCase):
         report = public_report(self.archive)
         self.assertEqual(report["faithful_candidates"], 1)
         self.assertEqual(report["reason_counts"]["unmatched_tool_result"], 1)
+
+    def test_malformed_tool_delivery_is_rejected_without_crashing(self) -> None:
+        def change(events):
+            delivery = next(event for event in events if event["kind"] == "delivery")
+            delivery["observation_id"] = ["tool-search"]
+
+        self._rewrite_capture(change)
+        ingest_snapshot(self.source, self.archive)
+        report = public_report(self.archive)
+        self.assertEqual(report["faithful_candidates"], 1)
+        self.assertEqual(report["reason_counts"]["unverified_tool_delivery"], 1)
 
     def test_tool_call_not_in_declared_schema_is_rejected(self) -> None:
         capture = self.source / "capture.jsonl"
@@ -179,6 +309,33 @@ class PipelineTests(unittest.TestCase):
             export_sft(self.archive, rights, "internal_training", output)
         self.assertFalse(output.exists())
 
+    def test_rights_manifest_is_bound_to_the_snapshot(self) -> None:
+        def change(events):
+            begin = next(
+                event
+                for event in events
+                if event["capture_id"] == "cap-search" and event["kind"] == "begin"
+            )
+            begin["messages"][1]["content"] = "A different fictional task."
+
+        self._rewrite_capture(change)
+        ingest_snapshot(self.source, self.archive)
+        output = self.root / "blocked.jsonl"
+        with self.assertRaisesRegex(SnapshotError, "snapshot_id does not match archive"):
+            export_sft(self.archive, RIGHTS, "internal_training", output)
+        self.assertFalse(output.exists())
+
+    def test_rights_manifest_without_snapshot_id_is_rejected(self) -> None:
+        ingest_snapshot(self.source, self.archive)
+        rights = self.root / "rights.json"
+        data = json.loads(RIGHTS.read_text())
+        del data["snapshot_id"]
+        rights.write_text(json.dumps(data))
+        output = self.root / "blocked.jsonl"
+        with self.assertRaisesRegex(SnapshotError, "rights snapshot_id"):
+            export_sft(self.archive, rights, "internal_training", output)
+        self.assertFalse(output.exists())
+
     def test_archive_tampering_is_detected_before_report(self) -> None:
         ingest_snapshot(self.source, self.archive)
         raw = self.archive / "raw" / "observations.jsonl"
@@ -224,7 +381,13 @@ class PipelineTests(unittest.TestCase):
             [row["sft_projection_supported"] for row in report["decisions"]], [False, True]
         )
         self.assertEqual(
-            export_sft(self.archive, RIGHTS, "internal_training", self.root / "sft.jsonl"), 1
+            export_sft(
+                self.archive,
+                self._rights_for(self.archive),
+                "internal_training",
+                self.root / "sft.jsonl",
+            ),
+            1,
         )
 
 

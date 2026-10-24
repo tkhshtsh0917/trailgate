@@ -1,6 +1,6 @@
 # Trailgate
 
-**Langfuseの観測記録を監査可能なエージェント軌跡へ整理し、条件を満たす学習用データだけを出力します。**
+**保存済みLangfuse記録を監査し、出典を追えるChat SFT候補を作成します。**
 
 [English README](README.md) · [v1.0.0までのロードマップ](docs/ROADMAP.md)
 
@@ -24,14 +24,14 @@ uv run --locked trailgate export steps private-example --out private-steps.jsonl
 uv run --locked trailgate export sft private-example --rights-file examples/synthetic/rights.json --use internal_training --out private-sft.jsonl
 ```
 
-`private-*`はGitの対象から除外します。archive directoryは`0700`、作成するファイルは`0600`に設定し、既存の出力先を上書きしません。出力先を共有する前に内容を確認してください。fixtureの利用許可ファイルは**架空データだけ**に適用できます。
+`private-*`はGitの対象から除外します。archive directoryは`0700`、作成するファイルは`0600`に設定し、既存の出力先を上書きしません。出力先を共有する前に内容を確認してください。fixtureの利用許可ファイルは、この**架空データのsnapshot IDだけ**に適用できます。元のページやcaptureを変更した場合は、新しいsnapshotに対する利用許可を確認して作成してください。
 
 ## 監査で分かること
 
 - 元のAPI応答ページを保存し、source row ID・hashと正規化後の内容を対応付けます。
-- generationごとに、モデル直前の入力、tool schema、assistant出力、対応するtool結果が記録されているか確認します。欠損を空のtool一覧や空の結果として補いません。
+- generationごとに、モデル直前の入力、tool schema、assistant出力、対応するtool結果が記録されているか確認します。Chat SFT候補はテキストとfunction-callの形式を検査します。欠損を空のtool一覧や空の結果として補いません。
 - `faithful_candidates`は記録の構造的な整合性を表します。回答品質、学習の効果、データの利用権の認定ではありません。
-- Chat形式のSFT出力には明示的な利用条件の申告が必要です。provider-nativeのResponses記録は保持・監査しますが、現行のChat SFT出力へ暗黙に変換しません。
+- Chat形式のSFT出力には、archiveの`snapshot_id`に一致する利用条件の自己申告が必要です。申告の真偽はTrailgateでは検証できません。provider-nativeのResponses記録は保持・監査しますが、現行のChat SFT出力へ暗黙に変換しません。
 
 v0.1.0にはLangfuseからの直接取得、複数traceをまたぐepisode復元、scoreの意味的な帰属、機密情報の自動検出はありません。大規模収集やモデル学習の成果も主張しません。初期版の範囲と後続の合格条件は[ロードマップ](docs/ROADMAP.md)を参照してください。
 

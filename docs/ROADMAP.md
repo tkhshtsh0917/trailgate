@@ -29,7 +29,7 @@ Milestones are gates, not calendar dates. A preview may ship with explicit limit
 
 ## Current state and next implementation slices
 
-The v0.1.0 source preview has a synthetic quickstart, release checklist, lint and unit checks, build checks, and an initial commit. A package release has not been made.
+The v0.1.0 source preview has a synthetic quickstart, release checklist, lint and unit checks, build checks, and an initial commit. Chat SFT projection checks a narrow text/function-call envelope, and the self-attested rights manifest is bound to the imported snapshot ID. This is an offline preview; the broader dataset eligibility gate remains a later milestone. A package release has not been made.
 
 1. **Episode schema and fixtures:** define canonical event JSON Schema and state transitions; add pathological synthetic snapshots before writing a broad stitcher. Keep `candidate` (structural) separate from `quality` and `rights` in both report and API names.
 2. **Collector specification:** write a bounded v2/v3 pull contract with cursor, idempotency key, incomplete-page recovery, delayed-score revision, and credential handling, then implement the smallest read-only vertical slice.

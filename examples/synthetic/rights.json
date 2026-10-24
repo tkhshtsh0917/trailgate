@@ -1,5 +1,6 @@
 {
   "schema_version": "trailgate.use_manifest.v1",
+  "snapshot_id": "12b7d6af388c8900a721235a2c5b2e03a2fb8a0d6f4e6be52d2d85940eb11f81",
   "attested_by": "Trailgate synthetic fixture authors",
   "confirmed_at": "2026-10-24",
   "permissions": {

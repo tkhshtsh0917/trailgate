@@ -1,7 +1,7 @@
 [project]
 name = "trailgate"
 version = "0.1.0"
-description = "Stitch agent traces into auditable trajectories and export eligible training data, starting with Langfuse."
+description = "Audit saved Langfuse decisions and prepare traceable Chat SFT candidates."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

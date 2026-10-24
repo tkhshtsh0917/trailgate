@@ -3,23 +3,37 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
 from .decision_audit import audit, public_report
 from .private_io import _private_jsonl
-from .snapshot_input import SnapshotError, _read_json
+from .snapshot_input import SnapshotError, _parse_json
 
 RIGHTS_SCHEMA = "trailgate.use_manifest.v1"
 USES = {"internal_training", "external_training"}
 
 
-def _check_rights(path: Path, use: str) -> dict[str, Any]:
+def _check_rights(path: Path, use: str, snapshot_id: str) -> tuple[dict[str, Any], str]:
     if use not in USES:
         raise SnapshotError(f"use must be one of {sorted(USES)}")
-    rights = _read_json(path)
+    try:
+        contents = path.read_bytes()
+        rights = _parse_json(contents.decode("utf-8"), str(path))
+    except (OSError, UnicodeError) as exc:
+        raise SnapshotError(f"cannot read {path}: {exc}") from exc
+    if not isinstance(rights, dict):
+        raise SnapshotError(f"{path}: expected a JSON object")
     if rights.get("schema_version") != RIGHTS_SCHEMA:
         raise SnapshotError(f"rights schema_version must be {RIGHTS_SCHEMA}")
+    attested_snapshot_id = rights.get("snapshot_id")
+    if not isinstance(attested_snapshot_id, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", attested_snapshot_id
+    ):
+        raise SnapshotError("rights snapshot_id must be a SHA-256 hex digest")
+    if attested_snapshot_id != snapshot_id:
+        raise SnapshotError("rights snapshot_id does not match archive")
     if not isinstance(rights.get("attested_by"), str) or not rights["attested_by"]:
         raise SnapshotError("rights attested_by is required")
     if not isinstance(rights.get("confirmed_at"), str) or not rights["confirmed_at"]:
@@ -31,15 +45,14 @@ def _check_rights(path: Path, use: str) -> dict[str, Any]:
         allowed = permissions.get(component)
         if not isinstance(allowed, list) or use not in allowed:
             raise SnapshotError(f"rights do not allow {use} for {component}")
-    return rights
+    return rights, hashlib.sha256(contents).hexdigest()
 
 
 def export_sft(archive_path: Path, rights_path: Path, use: str, output: Path) -> int:
     """Export only capture-backed decisions with explicit use attestation."""
     rights_path = Path(rights_path)
-    rights = _check_rights(rights_path, use)
-    rights_hash = hashlib.sha256(rights_path.read_bytes()).hexdigest()
     report = audit(archive_path)
+    rights, rights_hash = _check_rights(rights_path, use, report["snapshot_id"])
     output = Path(output)
     if output.exists():
         raise SnapshotError(f"output already exists: {output}")
@@ -64,6 +77,7 @@ def export_sft(archive_path: Path, rights_path: Path, use: str, output: Path) ->
                 "use": use,
                 "rights_ref": {
                     "sha256": rights_hash,
+                    "snapshot_id": report["snapshot_id"],
                     "attested_by": rights["attested_by"],
                     "confirmed_at": rights["confirmed_at"],
                 },

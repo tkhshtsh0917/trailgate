@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .archive import read_archive
+from .chat_shape import valid_message, valid_tool_call, valid_tool_schema
 from .snapshot_input import SnapshotError, _jsonl
 
 
@@ -19,7 +20,8 @@ def _capture_events(archive: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         capture_id = event.get("capture_id")
         if not isinstance(capture_id, str) or not capture_id:
             raise SnapshotError(f"{path}:{line_no}: capture_id is required")
-        if event.get("kind") not in {"begin", "finish", "delivery"}:
+        kind = event.get("kind")
+        if not isinstance(kind, str) or kind not in {"begin", "finish", "delivery"}:
             raise SnapshotError(f"{path}:{line_no}: unknown capture event kind")
         events[capture_id].append(event)
     return events
@@ -40,14 +42,22 @@ def _capture_links(observations: list[dict[str, Any]]) -> Counter[str]:
 
 def _validate_begin(begin: dict[str, Any], reasons: list[str]) -> None:
     provider_format = begin.get("provider_format", "chat_completions")
-    if provider_format not in {"chat_completions", "openai_responses"}:
+    if not isinstance(provider_format, str) or provider_format not in {
+        "chat_completions",
+        "openai_responses",
+    }:
         reasons.append("unsupported_provider_format")
     if provider_format == "openai_responses" and not isinstance(
         begin.get("request_parameters"), dict
     ):
         reasons.append("missing_provider_request_parameters")
-    if not isinstance(begin.get("messages"), list):
+    messages = begin.get("messages")
+    if not isinstance(messages, list):
         reasons.append("unknown_model_visible_messages")
+    elif provider_format == "chat_completions" and (
+        not messages or not all(valid_message(message) for message in messages)
+    ):
+        reasons.append("invalid_chat_messages")
     if not isinstance(begin.get("tools"), list):
         reasons.append("unknown_tool_schema")
 
@@ -57,15 +67,28 @@ def _declared_tools(begin: dict[str, Any] | None, reasons: list[str]) -> set[str
     if begin is None or not isinstance(begin.get("tools"), list):
         return names
 
+    provider_format = begin.get("provider_format", "chat_completions")
+    duplicate = False
     for tool in begin["tools"]:
+        if provider_format == "chat_completions" and not valid_tool_schema(tool):
+            reasons.append("invalid_tool_schema")
+            continue
         if not isinstance(tool, dict):
             reasons.append("invalid_tool_schema")
             continue
         function = tool.get("function", tool)
-        if not isinstance(function, dict) or not isinstance(function.get("name"), str):
+        if (
+            not isinstance(function, dict)
+            or not isinstance(function.get("name"), str)
+            or not function["name"]
+        ):
             reasons.append("invalid_tool_schema")
             continue
+        if function["name"] in names:
+            duplicate = True
         names.add(function["name"])
+    if duplicate:
+        reasons.append("duplicate_tool_schema_name")
     return names
 
 
@@ -82,7 +105,10 @@ def _validate_delivery(
         return
 
     delivery = matched[0]
-    tool_observation = observations_by_id.get(delivery.get("observation_id"))
+    observation_id = delivery.get("observation_id")
+    tool_observation = (
+        observations_by_id.get(observation_id) if isinstance(observation_id, str) else None
+    )
     if (
         "value" not in delivery
         or tool_observation is None
@@ -111,9 +137,17 @@ def _validate_tool_calls(
         if not isinstance(call, dict) or not isinstance(call.get("id"), str) or not call["id"]:
             reasons.append("invalid_tool_calls")
             break
+        if (
+            begin is not None
+            and begin.get("provider_format", "chat_completions") == "chat_completions"
+        ):
+            if not valid_tool_call(call):
+                reasons.append("invalid_tool_calls")
+                continue
         call_ids.append(call["id"])
         function = call.get("function")
-        if not isinstance(function, dict) or function.get("name") not in declared_tools:
+        name = function.get("name") if isinstance(function, dict) else None
+        if not isinstance(name, str) or name not in declared_tools:
             reasons.append("undeclared_tool_call")
 
     if len(set(call_ids)) != len(call_ids):
@@ -143,6 +177,12 @@ def _validate_finish(
     if not isinstance(assistant, dict) or assistant.get("role") != "assistant":
         reasons.append("invalid_model_output")
         return
+    if (
+        begin is not None
+        and begin.get("provider_format", "chat_completions") == "chat_completions"
+        and not valid_message(assistant, assistant_only=True)
+    ):
+        reasons.append("invalid_chat_assistant_message")
     _validate_tool_calls(assistant, begin, deliveries, observations_by_id, trace_id, reasons)
 
 
