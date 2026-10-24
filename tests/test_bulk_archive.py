@@ -133,6 +133,17 @@ class BulkArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "scores.jsonl count differs"):
             public_bulk_summary(archive_path)
 
+    def test_bulk_summary_counts_distinct_traces(self) -> None:
+        second = {**self.obs[0], "id": "gen-2", "trace_id": "trace-2"}
+        self.obs.append(second)
+        self._write_manifest()
+
+        archive_path = self.root / "archive"
+        ingest_blob_export(self.objects, self.manifest_path, archive_path)
+        report = public_bulk_summary(archive_path)
+        self.assertEqual(report["traces"], 2)
+        self.assertEqual(report["generations"], 2)
+
     def test_optional_parquet_stream(self) -> None:
         try:
             import pyarrow as arrow

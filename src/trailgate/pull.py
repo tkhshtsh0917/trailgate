@@ -169,9 +169,11 @@ def _request_page(
                     raise SnapshotError(f"Langfuse {table} page exceeds 32 MiB")
                 return data
         except urllib.error.HTTPError as exc:
-            if exc.code not in {429, 500, 502, 503, 504} or attempt == 3:
-                raise SnapshotError(f"Langfuse {table} returned HTTP {exc.code}") from exc
-            retry_after = exc.headers.get("Retry-After")
+            status = exc.code
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            exc.close()
+            if status not in {429, 500, 502, 503, 504} or attempt == 3:
+                raise SnapshotError(f"Langfuse {table} returned HTTP {status}") from exc
             delay = (
                 float(retry_after) if retry_after and retry_after.isdigit() else 0.25 * 2**attempt
             )

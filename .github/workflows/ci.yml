@@ -38,6 +38,9 @@ jobs:
       - name: Bulk resource gate
         if: matrix.python-version == '3.12.13'
         run: uv run --locked --extra bulk-parquet python scripts/benchmark_bulk.py --rows 100000 --max-rss-mib 1024
+      - name: High-cardinality bulk resource gate
+        if: matrix.python-version == '3.12.13'
+        run: uv run --locked --extra bulk-parquet python scripts/benchmark_bulk.py --rows 100000 --observations-per-trace 1 --max-rss-mib 1024
       - name: CLI
         run: uv run --locked trailgate doctor --source langfuse --input examples/synthetic/snapshot
       - name: Build

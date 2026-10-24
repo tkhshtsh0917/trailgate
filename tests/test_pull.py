@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -72,11 +73,12 @@ class PullTests(unittest.TestCase):
                 return b'{"data":[],"meta":{"cursor":null}}'
 
         requests = []
+        retry_body = io.BytesIO(b"fictional rate limit response")
 
         def respond(request, timeout):
             requests.append(request)
             if len(requests) == 1:
-                raise urllib.error.HTTPError(request.full_url, 429, "rate limit", {}, None)
+                raise urllib.error.HTTPError(request.full_url, 429, "rate limit", {}, retry_body)
             return Response()
 
         class Opener:
@@ -89,6 +91,7 @@ class PullTests(unittest.TestCase):
             body = module._request_page(self.spec, "observations", None, self.credentials)
         self.assertIn(b'"cursor":null', body)
         self.assertEqual(len(requests), 2)
+        self.assertTrue(retry_body.closed)
         self.assertEqual(requests[0].get_method(), "GET")
         self.assertIsInstance(opener.call_args.args[1], module.urllib.request.ProxyHandler)
         self.assertEqual(opener.call_args.args[1].proxies, {})

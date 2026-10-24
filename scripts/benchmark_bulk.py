@@ -22,10 +22,13 @@ def _revision() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rows", type=int, default=100_000)
+    parser.add_argument("--observations-per-trace", type=int, default=10)
     parser.add_argument("--max-rss-mib", type=int)
     args = parser.parse_args()
     if not 1 <= args.rows <= 1_000_000:
         parser.error("rows must be 1..1000000")
+    if not 1 <= args.observations_per_trace <= 1_000_000:
+        parser.error("observations-per-trace must be 1..1000000")
 
     with tempfile.TemporaryDirectory(prefix="trailgate-bulk-bench-") as temp:
         root = Path(temp)
@@ -38,11 +41,11 @@ def main() -> None:
             for index in range(args.rows):
                 row = {
                     "id": f"fictional-{index:06d}",
-                    "trace_id": f"trace-{index // 10:06d}",
+                    "trace_id": f"trace-{index // args.observations_per_trace:06d}",
                     "project_id": "fictional-project",
                     "start_time": "2026-10-01 00:00:00.000000",
                     "end_time": "2026-10-01 00:00:01.000000",
-                    "type": "GENERATION" if index % 10 == 0 else "SPAN",
+                    "type": ("GENERATION" if index % args.observations_per_trace == 0 else "SPAN"),
                     "parent_observation_id": "",
                 }
                 stream.write(json.dumps(row, separators=(",", ":")) + "\n")
@@ -96,6 +99,8 @@ def main() -> None:
                 {
                     "rows": args.rows,
                     "observations": report["observations"],
+                    "observations_per_trace": args.observations_per_trace,
+                    "traces": report["traces"],
                     "generations": report["generations"],
                     "peak_rss_bytes": rss_bytes,
                     "duration_seconds": round(elapsed, 3),
