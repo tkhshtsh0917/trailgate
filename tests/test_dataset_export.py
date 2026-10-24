@@ -44,6 +44,31 @@ class DatasetExportTests(unittest.TestCase):
         change(policy)
         self.policy.write_text(json.dumps(policy))
 
+    def _prepare_cross_trace_session(
+        self, session_id: str | None, *, train_session_id: str | None = None
+    ) -> None:
+        observations = self.source / "observations.jsonl"
+        page = json.loads(observations.read_text())
+        for row in page["data"]:
+            if row["id"] in {"root", "tool-search", "gen-search"}:
+                row["traceId"] = "test-trace"
+            row["sessionId"] = (
+                train_session_id
+                if row["id"] == "gen-answer" and train_session_id is not None
+                else session_id
+            )
+        observations.write_text(json.dumps(page) + "\n")
+
+        self._prepare()
+        self._rewrite_policy(
+            lambda data: data.update(
+                splits=[
+                    {"trace_id": "test-trace", "task_id": "test-task", "split": "test"},
+                    {"trace_id": "trace-example", "task_id": "train-task", "split": "train"},
+                ]
+            )
+        )
+
     def test_gated_dataset_is_deterministic_and_has_lineage(self) -> None:
         self._prepare()
         preview = evaluate_dataset(
@@ -159,22 +184,7 @@ class DatasetExportTests(unittest.TestCase):
         self.assertFalse(destination.exists())
 
     def test_cross_split_session_prefix_is_not_exported(self) -> None:
-        observations = self.source / "observations.jsonl"
-        page = json.loads(observations.read_text())
-        for row in page["data"]:
-            if row["id"] in {"root", "tool-search", "gen-search"}:
-                row["traceId"] = "test-trace"
-        observations.write_text(json.dumps(page) + "\n")
-        self._prepare()
-        self._rewrite_policy(
-            lambda data: data["splits"].extend(
-                [
-                    {"trace_id": "test-trace", "task_id": "test-task", "split": "test"},
-                    {"trace_id": "trace-example", "task_id": "train-task", "split": "train"},
-                ]
-            )
-        )
-        self._rewrite_policy(lambda data: data["splits"].pop(0))
+        self._prepare_cross_trace_session("session-example")
 
         preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
         self.assertEqual(preview["eligible_chat_sft"], 0)
@@ -186,6 +196,78 @@ class DatasetExportTests(unittest.TestCase):
         )
         self.assertEqual(result["eligible_chat_sft"], 0)
         self.assertEqual((destination / "chat_sft.jsonl").read_bytes(), b"")
+
+    def test_missing_session_metadata_cannot_prove_split_isolation(self) -> None:
+        self._prepare_cross_trace_session(None)
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 0)
+        self.assertEqual(preview["rejected_reasons"]["gate:session_scope_isolated"], 2)
+
+        destination = self.root / "dataset"
+        result = export_dataset(
+            self.archive, self.rights, self.policy, "internal_training", destination
+        )
+        self.assertEqual(result["eligible_chat_sft"], 0)
+        self.assertEqual((destination / "chat_sft.jsonl").read_bytes(), b"")
+
+    def test_unknown_peer_session_cannot_clear_known_train_session(self) -> None:
+        self._prepare_cross_trace_session(None, train_session_id="train-session")
+
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 0)
+        self.assertEqual(preview["rejected_reasons"]["gate:session_scope_isolated"], 2)
+
+    def test_partial_session_metadata_cannot_prove_split_isolation(self) -> None:
+        observations = self.source / "observations.jsonl"
+        page = json.loads(observations.read_text())
+        next(row for row in page["data"] if row["id"] == "tool-search")["sessionId"] = None
+        observations.write_text(json.dumps(page) + "\n")
+        self._prepare()
+
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 0)
+        self.assertEqual(preview["rejected_reasons"]["gate:session_scope_isolated"], 2)
+
+    def test_conflicting_session_metadata_cannot_prove_split_isolation(self) -> None:
+        observations = self.source / "observations.jsonl"
+        page = json.loads(observations.read_text())
+        next(row for row in page["data"] if row["id"] == "gen-answer")["sessionId"] = (
+            "other-session"
+        )
+        observations.write_text(json.dumps(page) + "\n")
+        self._prepare()
+
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 0)
+        self.assertEqual(preview["rejected_reasons"]["gate:session_scope_isolated"], 2)
+
+    def test_blank_session_metadata_cannot_prove_split_isolation(self) -> None:
+        observations = self.source / "observations.jsonl"
+        page = json.loads(observations.read_text())
+        next(row for row in page["data"] if row["id"] == "gen-answer")["sessionId"] = " "
+        observations.write_text(json.dumps(page) + "\n")
+        self._prepare()
+
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 0)
+        self.assertEqual(preview["rejected_reasons"]["gate:session_scope_isolated"], 2)
+
+    def test_missing_session_in_other_project_does_not_block_current_project(self) -> None:
+        observations = self.source / "observations.jsonl"
+        page = json.loads(observations.read_text())
+        other = {
+            **next(row for row in page["data"] if row["id"] == "root"),
+            "id": "unrelated-root",
+            "traceId": "unrelated-trace",
+            "projectId": "unrelated-project",
+            "sessionId": None,
+        }
+        page["data"].append(other)
+        observations.write_text(json.dumps(page) + "\n")
+        self._prepare()
+
+        preview = evaluate_dataset(self.archive, self.rights, self.policy, "internal_training")
+        self.assertEqual(preview["eligible_chat_sft"], 2)
 
     def test_unassigned_session_peer_blocks_training_view(self) -> None:
         observations = self.source / "observations.jsonl"

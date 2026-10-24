@@ -46,32 +46,45 @@ def _decision_gates(
 def _isolated_traces(
     observations: list[dict[str, Any]], splits: dict[str, dict[str, str]]
 ) -> set[tuple[str, str]]:
-    """Reject known session peers with missing or different task/split evidence."""
+    """Require one known session per trace and compatible peer task/split evidence."""
     sessions: dict[tuple[str, str], set[str]] = {}
-    trace_sessions: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    trace_sessions: dict[tuple[str, str], set[str | None]] = {}
     trace_projects: dict[str, set[str]] = {}
-    traces: set[tuple[str, str]] = set()
     for row in observations:
         scope = (row["project_id"], row["trace_id"])
-        traces.add(scope)
         trace_projects.setdefault(row["trace_id"], set()).add(row["project_id"])
-        if isinstance(row.get("session_id"), str) and row["session_id"]:
-            session = (row["project_id"], row["session_id"])
-            sessions.setdefault(session, set()).add(row["trace_id"])
-            trace_sessions.setdefault(scope, set()).add(session)
+        session_id = row.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            session_id = None
+        trace_sessions.setdefault(scope, set()).add(session_id)
+        if session_id is not None:
+            sessions.setdefault((row["project_id"], session_id), set()).add(row["trace_id"])
 
+    incomplete_projects = {
+        project_id
+        for (project_id, _), observed_sessions in trace_sessions.items()
+        if len(observed_sessions) != 1 or None in observed_sessions
+    }
     isolated = set()
-    for scope in traces:
+    for scope, observed_sessions in trace_sessions.items():
         project_id, trace_id = scope
         own_split = splits.get(trace_id)
-        if len(trace_projects[trace_id]) != 1 or own_split is None:
+        if (
+            project_id in incomplete_projects
+            or len(trace_projects[trace_id]) != 1
+            or own_split is None
+            or len(observed_sessions) != 1
+            or None in observed_sessions
+        ):
             continue
+
+        session_id = next(iter(observed_sessions))
+        peers = sessions[(project_id, session_id)]
         if all(
-            all(
-                len(trace_projects[peer]) == 1 and splits.get(peer) == own_split
-                for peer in sessions[session]
-            )
-            for session in trace_sessions.get((project_id, trace_id), ())
+            len(trace_projects[peer]) == 1
+            and trace_sessions[(project_id, peer)] == {session_id}
+            and splits.get(peer) == own_split
+            for peer in peers
         ):
             isolated.add(scope)
     return isolated

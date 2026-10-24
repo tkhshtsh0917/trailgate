@@ -22,7 +22,7 @@ The example yields two eligible Chat SFT rows for the **unchanged** fixture and 
 
 ## From your own Langfuse project
 
-1. Instrument the application at its model boundary with `CaptureWriter` and attach each capture ID to the matching generation. Record tool deliveries actually seen by the model. See [capture](CAPTURE.md).
+1. Instrument the application at its model boundary with `CaptureWriter` and attach each capture ID to the matching generation. Record tool deliveries actually seen by the model. For gated Chat SFT, ensure all observations in a trace carry one consistent session ID. See [capture](CAPTURE.md).
 2. Choose one source route: saved API pages, a bounded read-only [pull](PULL.md), or a complete local [enriched blob run](BLOB.md). Keep the raw source and the imported archive private. A bulk run without capture is still useful for diagnosis but cannot supply faithful Chat SFT decisions.
 3. Use `report` and `inspect` to check missing capture, ambiguous links, and truncation. Use `export graph` only into a private location when full context is needed. Scores remain later evidence.
 4. Create fresh rights and policy declarations for the archive's exact `snapshot_id`; do not reuse the fictional files. Review generation IDs, answer quality, sensitive content, and task-level splits. Preview with `evaluate dataset`, then export into a new private directory. See [dataset gates](DATASET.md).
