@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trailgate:schema:archive-index:v1-v2",
+  "title": "Trailgate archive index v1 or v2",
+  "type": "object",
+  "required": ["schema_version", "source_schema", "source_hashes", "derived_hashes", "snapshot_id", "observations", "scores", "declared_complete"],
+  "properties": {
+    "schema_version": {"enum": ["trailgate.archive.v1", "trailgate.archive.v2"]},
+    "source_schema": {"type": "string"},
+    "source_hashes": {"$ref": "#/$defs/hashes"},
+    "derived_hashes": {"$ref": "#/$defs/hashes"},
+    "snapshot_id": {"$ref": "#/$defs/sha256"},
+    "observations": {"type": "integer", "minimum": 0},
+    "scores": {"type": "integer", "minimum": 0},
+    "declared_complete": {"const": true}
+  },
+  "allOf": [
+    {"if": {"properties": {"schema_version": {"const": "trailgate.archive.v1"}}}, "then": {"properties": {"source_schema": {"const": "trailgate.langfuse_api_snapshot.v1"}}}},
+    {"if": {"properties": {"schema_version": {"const": "trailgate.archive.v2"}}}, "then": {"properties": {"source_schema": {"const": "langfuse.blob_manifest.v1"}}}}
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/sha256"}}
+  }
+}

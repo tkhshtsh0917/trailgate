@@ -4,11 +4,11 @@
 
 Trailgate はローカルで動く Python の CLI・ライブラリです。保存済み Observations v2 / Scores v3 応答ページの取り込み、範囲を限定した読み取り専用 API pull、enriched blob export の取り込みに対応します。元データの bytes と hash を保持し、観測できた decision と tool の関係を復元します。構造上の忠実性、品質選択、利用権、プライバシー、データ分割を別々に扱います。本体はモデル API を呼ばず、データセットを送信しません。
 
-[English README](README.md) · [ロードマップ](docs/ROADMAP.md) · [公開手順](docs/RELEASING.md)
+[English README](README.md) · [一通りの手順](docs/GUIDE.md) · [v1 の契約と移行](docs/CONTRACT.md) · [ロードマップ](docs/ROADMAP.md) · [公開手順](docs/RELEASING.md)
 
 ## 架空データで試す
 
-Python 3.12.13 と依存関係の lockfile を固定しています。リポジトリのルートで実行してください。
+CPython 3.12.13〜3.14 に対応します。`.python-version` は開発環境用の 3.12.13 を指定しています。リポジトリのルートで実行してください。
 
 ```sh
 uv sync --locked
@@ -47,7 +47,7 @@ uv run --locked trailgate export dataset private-example \
 
 `faithful_candidates` は capture の**構造上の整合性**だけを表し、正答率や利用権の認定ではありません。Chat SFT はテキストと function call の範囲に対応します。provider-native の Responses 記録は元の形で archive と一般形式 episode に残し、Chat へ暗黙に変換しません。
 
-学習用データセットには、generation ID ごとの手動品質選択、task input・model output・tool result それぞれの利用許可、機微情報なしという明示的なプライバシー確認、task 単位の split 記録が必要です。これらは利用者の自己申告であり、Trailgate が品質・法的権利・プライバシーを独立に保証するものではありません。自動墨消し、完全な episode 境界、複数ログソースの取り込み、token 単位の loss mask、RL rollout 出力、モデル学習は v0.2.0 の範囲外です。
+学習用データセットには、generation ID ごとの手動品質選択、task input・model output・tool result それぞれの利用許可、機微情報なしという明示的なプライバシー確認、task 単位の split 記録が必要です。これらは利用者の自己申告であり、Trailgate が品質・法的権利・プライバシーを独立に保証するものではありません。自動墨消し、完全な episode 境界、複数ログソースの取り込み、token 単位の loss mask、RL rollout 出力、モデル学習は v1.0.0 の範囲外です。公開ファイル形式の [JSON Schema](docs/CONTRACT.md#published-json-schemas) と [脅威・失敗境界](docs/SECURITY.md) も参照してください。
 
 [任意の live 診断](examples/live/README.md)は、明示して実行した場合だけ self-hosted Langfuse、モデル API、または MuSiQue の公式 train データを使います。本体とテストは架空データで動き、モデル API を呼びません。
 

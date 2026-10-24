@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trailgate:schema:dataset-policy:v1",
+  "title": "Trailgate dataset eligibility policy v1",
+  "type": "object",
+  "required": ["schema_version", "snapshot_id", "use", "quality", "privacy", "splits"],
+  "properties": {
+    "schema_version": {"const": "trailgate.dataset_policy.v1"},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "use": {"enum": ["internal_training", "external_training"]},
+    "quality": {
+      "type": "object",
+      "required": ["method", "reviewed_by", "approved_observation_ids"],
+      "properties": {
+        "method": {"const": "manual_observation_review"},
+        "reviewed_by": {"type": "string", "minLength": 1},
+        "approved_observation_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "required": ["method", "reviewed_by", "confirmed_at", "sensitive_data", "redaction"],
+      "properties": {
+        "method": {"const": "manual_review"},
+        "reviewed_by": {"type": "string", "minLength": 1},
+        "confirmed_at": {"type": "string", "minLength": 1},
+        "sensitive_data": {"const": "absent"},
+        "redaction": {"const": "none"}
+      }
+    },
+    "splits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["trace_id", "task_id", "split"],
+        "properties": {
+          "trace_id": {"type": "string", "minLength": 1},
+          "task_id": {"type": "string", "minLength": 1},
+          "split": {"enum": ["train", "validation", "test"]}
+        }
+      }
+    }
+  }
+}

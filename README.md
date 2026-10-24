@@ -4,11 +4,11 @@
 
 Trailgate is a local-first Python CLI and library. It imports saved Langfuse Observations v2 / Scores v3 pages, can pull bounded pages through the read-only API, and ingests complete enriched blob-export runs. It preserves source bytes and hashes, reconstructs observed decision/tool relationships, and separates capture fidelity from quality, rights, privacy, and split decisions. The core never calls a model or uploads a dataset.
 
-[日本語 README](README.ja.md) · [Roadmap](docs/ROADMAP.md) · [Release checklist](docs/RELEASING.md)
+[日本語 README](README.ja.md) · [End-to-end guide](docs/GUIDE.md) · [v1 contracts](docs/CONTRACT.md) · [Roadmap](docs/ROADMAP.md) · [Release checklist](docs/RELEASING.md)
 
 ## Try the fictional fixture
 
-Python 3.12.13 and the dependency lockfile are committed. From a fresh checkout:
+CPython 3.12.13–3.14 is supported; `.python-version` selects 3.12.13 for the locked development environment. From a fresh checkout:
 
 ```sh
 uv sync --locked
@@ -39,7 +39,7 @@ The synthetic fixture contains two Chat SFT decisions. The sample rights and pol
 | Mirrored enriched blob-export run | `ingest-blob` | [Manifest-based streaming import](docs/BLOB.md) |
 | Application model boundary | `CaptureWriter` | [Capture, abort, and recovery](docs/CAPTURE.md) |
 
-`report` prints counts and at most 100 decision diagnostics by default (`--max-decisions`, maximum 1,000). It never prints captured prompt or tool-result content. `export graph` writes a private [versioned episode graph](docs/EPISODE_GRAPH.md) with captured content and explicit unknown boundaries. `export dataset` writes private generic episodes, validated Chat SFT rows, and a manifest with hashes and selection reasons. Scores are linked to subjects as evidence and never inserted into earlier model input.
+`report` prints counts and at most 100 decision diagnostics by default (`--max-decisions`, maximum 1,000). It never prints captured prompt or tool-result content. `export graph` writes a private [versioned episode graph](docs/EPISODE_GRAPH.md) with captured content and explicit unknown boundaries. `export dataset` writes private generic episodes, gated Chat SFT rows, and a manifest with hashes and selection reasons. Scores are linked to subjects as evidence and never inserted into earlier model input. The [published JSON Schemas](docs/CONTRACT.md#published-json-schemas) cover public file envelopes; runtime checks also verify hashes and cross-file relationships.
 
 Saved API snapshots are limited to 64 MiB. In-memory graph, audit, and dataset views accept at most 20,000 observations and 32 MiB of normalized rows plus capture. Bulk `report` and `inspect` stream verified rows; `inspect` reports omitted observations when its output limit is reached. See [bulk intake](docs/BLOB.md) for larger collections.
 
@@ -53,7 +53,7 @@ Langfuse observations alone do not prove the exact messages or tool schemas sent
 
 `faithful_candidates` is a **structural capture count**, not a correctness or rights judgment. The current Chat SFT projection supports text and function calls; multimodal parts, legacy function calls, and provider-specific Chat fields are excluded. Provider-native Responses data stays opaque in the private archive and generic episode view. The tool envelope is checked, but full JSON Schema semantics and model-specific chat templates are outside this release.
 
-The dataset view requires manually selected generation IDs, separate use attestations for task input/model output/tool result, an explicit privacy review with no sensitive content, and trace-to-task split evidence. These are self-attestations: Trailgate cannot independently certify answer quality, legal permission, privacy, or that the application captured at the correct instant. Automatic redaction, exact episode boundaries, multi-source log ingestion, token-level loss masks, preference/RL rollout export, and model training remain outside v0.2.0.
+The dataset view requires manually selected generation IDs, separate use attestations for task input/model output/tool result, an explicit privacy review with no sensitive content, and trace-to-task split evidence. These are self-attestations: Trailgate cannot independently certify answer quality, legal permission, privacy, or that the application captured at the correct instant. Automatic redaction, exact episode boundaries, multi-source log ingestion, token-level loss masks, preference/RL rollout export, and model training remain outside v1.0.0. See the [threat model](docs/SECURITY.md) and [comparison](docs/COMPARISON.md).
 
 Optional [live diagnostics](examples/live/README.md) use a self-hosted Langfuse instance and, only when explicitly run, a model API or official MuSiQue train corpus. Tests and the core package use fictional data and make no model calls.
 

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trailgate:schema:chat-sft:v1",
+  "title": "Trailgate gated Chat SFT example v1",
+  "type": "object",
+  "required": ["schema_version", "messages", "tools", "request_parameters", "target", "source", "task_id", "split", "use", "rights_sha256", "policy_sha256"],
+  "properties": {
+    "schema_version": {"const": "trailgate.chat_sft.v1"},
+    "messages": {"type": "array", "minItems": 2, "items": {"type": "object"}},
+    "tools": {"type": "array", "items": {"type": "object"}},
+    "request_parameters": {"type": ["object", "null"]},
+    "target": {"const": "last_assistant_message"},
+    "source": {
+      "type": "object",
+      "required": ["snapshot_id", "trace_id", "observation_id", "capture_id"],
+      "properties": {
+        "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "trace_id": {"type": "string", "minLength": 1},
+        "observation_id": {"type": "string", "minLength": 1},
+        "capture_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "task_id": {"type": "string", "minLength": 1},
+    "split": {"const": "train"},
+    "use": {"enum": ["internal_training", "external_training"]},
+    "rights_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

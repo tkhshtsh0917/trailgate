@@ -1,0 +1,14 @@
+# Data protection and failure boundaries
+
+Trailgate handles prompts, tool results, and model outputs as potentially sensitive local data. Its core performs no model call or dataset upload. An explicit `pull` uses Langfuse GET endpoints. Saved source bytes and content-bearing exports remain local; the caller controls retention, sharing, and deletion.
+
+| Threat or failure | v1 behavior | Residual responsibility |
+|---|---|---|
+| Credential disclosure | Keys are read from process environment for `pull`; normal errors and reports omit them. Redirects and ambient HTTP proxies are disabled; HTTP is permitted only on loopback. | Protect shell history, process environment, host, Langfuse account, and network. Use a trusted HTTPS endpoint. |
+| Sensitive content in Git or package | Private output names are Git-ignored; outputs use private POSIX modes. `scripts/check_public_files.py` rejects suspicious candidate paths before reading and checks public text and build member names. | This heuristic cannot detect every secret. Review staged files and release artifacts manually. Never commit real traces, corpora, or declarations tied to them. |
+| False training eligibility | Dataset export checks structural capture, supported Chat shape, manual quality selection, use attestation, privacy assertion, and task split. Missing evidence excludes the affected decision. | Assertions do not prove rights, correctness, privacy, or capture timing. Review source terms, inputs, outputs, and downstream training setup. |
+| Modified or partial source | API pages, blob objects, archive rows, and output hashes are checked at their respective boundaries. Pull resumes only matching scopes/checkpoints; blob resume rejects changed objects. | A source system can omit late-arriving data. A self-declared complete snapshot is bounded to its recorded query and collection time. |
+| Resource exhaustion | API pages, snapshots, capture events, JSONL rows, in-memory views, and CLI output have documented limits. Large archives retain streaming report/inspect access. | Large graph or dataset exports require smaller source windows. Disk usage of retained raw data remains the operator's responsibility. |
+| Malicious content inside a trace | Trace text is treated as data, not instructions. Core transforms do not execute tool calls, deserialize Python objects, or invoke an LLM. | An application that later feeds exported text to a model needs its own prompt-injection controls. |
+
+JSON Schema validation is a structural check and does not replace Trailgate's semantic validation or a human review. `episodes.jsonl`, graph exports, and candidate SFT rows are private diagnostics even when they contain plausible model turns. When evidence is absent, retain the original archive and investigate; do not mark a row eligible by editing the manifest.

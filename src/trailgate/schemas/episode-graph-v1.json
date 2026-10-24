@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trailgate:schema:episode-graph:v1",
+  "title": "Trailgate observed episode graph v1",
+  "type": "object",
+  "required": ["schema_version", "snapshot_id", "episodes", "traces", "decisions", "actions", "deliveries", "observation_links", "score_links", "orphan_tool_observation_ids", "raw_capture_order", "order"],
+  "properties": {
+    "schema_version": {"const": "trailgate.episode_graph.v1"},
+    "snapshot_id": {"$ref": "#/$defs/sha256"},
+    "episodes": {"type": "array", "items": {"$ref": "#/$defs/episode"}},
+    "traces": {"type": "array", "items": {"type": "object", "required": ["id", "project_id", "trace_id", "episode_id"]}},
+    "decisions": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+    "actions": {"type": "array", "items": {"$ref": "#/$defs/action"}},
+    "deliveries": {"type": "array", "items": {"$ref": "#/$defs/delivery"}},
+    "observation_links": {"type": "array", "items": {"type": "object", "required": ["child_id", "parent_id", "resolved", "relation"]}},
+    "score_links": {"type": "array", "items": {"type": "object", "required": ["score_id", "subject_kind", "subject_id", "resolved", "source_ref"]}},
+    "orphan_tool_observation_ids": {"type": "array", "items": {"type": "string"}},
+    "raw_capture_order": {"type": "array", "items": {"type": "object", "required": ["line", "capture_id", "kind"]}},
+    "order": {"type": "object", "required": ["raw_capture", "observations", "causal"], "properties": {"causal": {"const": "explicit_links_only"}}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "episode": {"type": "object", "required": ["id", "scope", "trace_ids", "boundary", "decision_ids"], "properties": {"id": {"type": "string"}, "scope": {"type": "object", "required": ["project_id", "kind", "id"], "properties": {"kind": {"enum": ["trace", "session"]}}}, "trace_ids": {"type": "array", "items": {"type": "string"}}, "boundary": {"const": "unknown"}, "decision_ids": {"type": "array", "items": {"type": "string"}}}},
+    "decision": {"type": "object", "required": ["id", "episode_id", "trace_id", "observation_id", "source_ref", "capture_id", "visible_prefix", "visible_prefix_provenance", "terminal_state", "structural_candidate", "reasons", "action_ids"], "properties": {"visible_prefix_provenance": {"enum": ["capture_begin", "unknown"]}, "terminal_state": {"enum": ["finished", "aborted", "unknown"]}, "structural_candidate": {"type": "boolean"}, "reasons": {"type": "array", "items": {"type": "string"}}, "source_ref": {"type": "object", "required": ["sha256"]}}},
+    "action": {"type": "object", "required": ["id", "decision_id", "index", "call_id", "delivery_id", "retry_relation", "state"], "properties": {"state": {"enum": ["verified_delivery", "unverified_delivery", "missing_result"]}, "retry_relation": {"const": "unknown"}}},
+    "delivery": {"type": "object", "required": ["id", "action_id", "capture_line", "call_id", "tool_observation_id", "source_ref", "value_recorded", "provenance", "backend_output_provenance"], "properties": {"value_recorded": {"type": "boolean"}, "provenance": {"const": "capture_delivered_value"}, "backend_output_provenance": {"enum": ["langfuse_tool_observation", "unknown"]}}}
+  }
+}

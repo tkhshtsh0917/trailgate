@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trailgate:schema:dataset-manifest:v1",
+  "title": "Trailgate dataset output manifest v1",
+  "type": "object",
+  "required": ["schema_version", "snapshot_id", "archive_schema", "source_hashes", "transform", "use", "rights", "policy_sha256", "quality_method", "privacy", "split_evidence", "counts", "rejected_reasons", "output_hashes", "views"],
+  "properties": {
+    "schema_version": {"const": "trailgate.dataset.v1"},
+    "snapshot_id": {"$ref": "#/$defs/sha256"},
+    "archive_schema": {"enum": ["trailgate.archive.v1", "trailgate.archive.v2"]},
+    "source_hashes": {"$ref": "#/$defs/hashes"},
+    "transform": {"type": "object", "required": ["episode_graph", "policy"], "properties": {"episode_graph": {"const": "trailgate.episode_graph.v1"}, "policy": {"const": "trailgate.dataset_policy.v1"}}},
+    "use": {"enum": ["internal_training", "external_training"]},
+    "rights": {"type": "object", "required": ["sha256", "attested_by", "confirmed_at"], "properties": {"sha256": {"$ref": "#/$defs/sha256"}, "attested_by": {"type": "string"}, "confirmed_at": {"type": "string"}}},
+    "policy_sha256": {"$ref": "#/$defs/sha256"},
+    "quality_method": {"const": "manual_observation_review"},
+    "privacy": {"type": "object"},
+    "split_evidence": {"type": "array", "items": {"type": "object"}},
+    "counts": {"type": "object", "required": ["decisions", "eligible_chat_sft", "rejected_chat_sft", "episodes"], "additionalProperties": {"type": "integer", "minimum": 0}},
+    "rejected_reasons": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+    "output_hashes": {"$ref": "#/$defs/hashes"},
+    "views": {"type": "object", "required": ["chat_sft.jsonl", "episodes.jsonl"], "properties": {"chat_sft.jsonl": {"const": "gated_training_view"}, "episodes.jsonl": {"const": "diagnostic_only"}}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "hashes": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/sha256"}}
+  }
+}

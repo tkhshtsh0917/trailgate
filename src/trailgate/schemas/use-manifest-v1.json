@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trailgate:schema:use-manifest:v1",
+  "title": "Trailgate use attestation v1",
+  "type": "object",
+  "required": ["schema_version", "snapshot_id", "attested_by", "confirmed_at", "permissions"],
+  "properties": {
+    "schema_version": {"const": "trailgate.use_manifest.v1"},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "attested_by": {"type": "string", "minLength": 1},
+    "confirmed_at": {"type": "string", "minLength": 1},
+    "permissions": {
+      "type": "object",
+      "required": ["task_input", "model_output", "tool_result"],
+      "properties": {
+        "task_input": {"$ref": "#/$defs/uses"},
+        "model_output": {"$ref": "#/$defs/uses"},
+        "tool_result": {"$ref": "#/$defs/uses"}
+      }
+    }
+  },
+  "$defs": {
+    "uses": {"type": "array", "uniqueItems": true, "items": {"enum": ["internal_training", "external_training"]}}
+  }
+}

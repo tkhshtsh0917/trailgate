@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trailgate:schema:episode-row:v1",
+  "title": "Trailgate diagnostic episode dataset row v1",
+  "type": "object",
+  "required": ["schema_version", "eligibility", "snapshot_id", "episode", "decisions", "actions", "deliveries", "score_links"],
+  "properties": {
+    "schema_version": {"const": "trailgate.episode_graph.v1"},
+    "eligibility": {"const": "diagnostic_only"},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "episode": {"type": "object", "required": ["id", "scope", "boundary", "decision_ids"]},
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "observation_id", "source_ref", "eligibility"],
+        "properties": {
+          "eligibility": {
+            "type": "object",
+            "required": ["eligible_for_chat_sft", "reasons"],
+            "properties": {
+              "eligible_for_chat_sft": {"type": "boolean"},
+              "reasons": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "actions": {"type": "array", "items": {"type": "object", "required": ["id", "decision_id", "state"]}},
+    "deliveries": {"type": "array", "items": {"type": "object", "required": ["id", "action_id", "value_recorded"]}},
+    "score_links": {"type": "array", "items": {"type": "object", "required": ["score_id", "resolved", "source_ref"]}}
+  }
+}
