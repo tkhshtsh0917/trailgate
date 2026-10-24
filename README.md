@@ -16,6 +16,10 @@ uv run --locked trailgate doctor --source langfuse --input examples/synthetic/sn
 uv run --locked trailgate ingest langfuse-api-snapshot examples/synthetic/snapshot --out private-example
 uv run --locked trailgate report private-example
 uv run --locked trailgate export graph private-example --out private-graph.json
+uv run --locked trailgate evaluate dataset private-example \
+  --rights-file examples/synthetic/rights.json \
+  --policy-file examples/synthetic/policy.json \
+  --use internal_training
 uv run --locked trailgate export dataset private-example \
   --rights-file examples/synthetic/rights.json \
   --policy-file examples/synthetic/policy.json \
@@ -24,7 +28,7 @@ uv run --locked trailgate export dataset private-example \
 
 The synthetic fixture contains two Chat SFT decisions. The sample rights and policy files apply only to this exact fictional snapshot ID. `private-*` outputs are ignored by Git; on POSIX hosts archive and dataset directories use mode `0700`, and files use `0600`. Existing outputs are never overwritten.
 
-`trailgate export sft` remains a **candidate-only diagnostic** for compatibility. It does not apply quality, privacy, or split gates. For a training view, use `export dataset` and inspect its `manifest.json` and rejected decision reasons. See [dataset eligibility](docs/DATASET.md).
+`trailgate export sft` remains a **candidate-only diagnostic** for compatibility. It does not apply quality, privacy, or split gates. `evaluate dataset` previews gate counts and reasons without writing model content; `export dataset` creates the gated training view. See [dataset eligibility](docs/DATASET.md).
 
 ## Inputs and outputs
 
@@ -36,6 +40,8 @@ The synthetic fixture contains two Chat SFT decisions. The sample rights and pol
 | Application model boundary | `CaptureWriter` | [Capture, abort, and recovery](docs/CAPTURE.md) |
 
 `report` prints counts and at most 100 decision diagnostics by default (`--max-decisions`, maximum 1,000). It never prints captured prompt or tool-result content. `export graph` writes a private [versioned episode graph](docs/EPISODE_GRAPH.md) with captured content and explicit unknown boundaries. `export dataset` writes private generic episodes, validated Chat SFT rows, and a manifest with hashes and selection reasons. Scores are linked to subjects as evidence and never inserted into earlier model input.
+
+Saved API snapshots are limited to 64 MiB. In-memory graph, audit, and dataset views accept at most 20,000 observations and 32 MiB of normalized rows plus capture. Bulk `report` and `inspect` stream verified rows; `inspect` reports omitted observations when its output limit is reached. See [bulk intake](docs/BLOB.md) for larger collections.
 
 ### Saved API snapshot
 

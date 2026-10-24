@@ -16,6 +16,10 @@ uv run --locked trailgate doctor --source langfuse --input examples/synthetic/sn
 uv run --locked trailgate ingest langfuse-api-snapshot examples/synthetic/snapshot --out private-example
 uv run --locked trailgate report private-example
 uv run --locked trailgate export graph private-example --out private-graph.json
+uv run --locked trailgate evaluate dataset private-example \
+  --rights-file examples/synthetic/rights.json \
+  --policy-file examples/synthetic/policy.json \
+  --use internal_training
 uv run --locked trailgate export dataset private-example \
   --rights-file examples/synthetic/rights.json \
   --policy-file examples/synthetic/policy.json \
@@ -24,7 +28,7 @@ uv run --locked trailgate export dataset private-example \
 
 架空の fixture には Chat SFT 対象の decision が 2 件あります。付属の権利申告とポリシーは、**この架空 snapshot ID にだけ**適用されます。`private-*` は Git から除外し、POSIX 環境では出力ディレクトリを `0700`、ファイルを `0600` で作成します。既存の出力は上書きしません。
 
-従来の `trailgate export sft` は互換性のため残した**候補診断用**です。品質・プライバシー・split は確認しません。学習用の判定には `export dataset` を使い、`manifest.json` と除外理由を確認してください。詳細は[データセット適格性](docs/DATASET.md)を参照してください。
+従来の `trailgate export sft` は互換性のため残した**候補診断用**です。品質・プライバシー・split は確認しません。`evaluate dataset` はモデル内容を書き出さずに適格性と除外理由を表示します。学習用の出力には `export dataset` を使用してください。詳細は[データセット適格性](docs/DATASET.md)を参照してください。
 
 ## 入力と出力
 
@@ -36,6 +40,8 @@ uv run --locked trailgate export dataset private-example \
 | アプリのモデル呼び出し境界 | `CaptureWriter` | [capture と復旧](docs/CAPTURE.md) |
 
 `report` は件数と最大 100 件の decision 診断を既定で表示し、プロンプトや tool 結果の中身は表示しません。`export graph` は、内容を含む非公開の[episode graph](docs/EPISODE_GRAPH.md)を出力します。episode の開始・終了が不明な場合は `unknown` と記録します。`export dataset` は一般形式の episode、条件を満たした Chat SFT 行、出典・選択理由を持つ manifest を非公開ファイルとして出力します。score は後から付く根拠として別に扱い、過去のモデル入力へ混ぜません。
+
+保存済み API snapshot は 64 MiB までです。メモリ上の graph・audit・dataset view は observation 20,000 件、正規化行と capture の合計 32 MiB が上限です。大きな blob archive の `report` と `inspect` は逐次処理し、`inspect` は表示上限による省略件数を明示します。
 
 ## 判定の限界
 

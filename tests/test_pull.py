@@ -224,6 +224,30 @@ class PullTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "page hash mismatch"):
             pull_snapshot(self.spec, destination, self.credentials, resume=True)
 
+    def test_pull_rejects_duplicate_rows_before_checkpoint(self) -> None:
+        def duplicate(spec, table, cursor, credentials):
+            if table == "observations" and cursor == "2":
+                return json.dumps(
+                    {"data": [self.observations[0]], "meta": {"cursor": None}}
+                ).encode()
+            return self._page(spec, table, cursor, credentials)
+
+        destination = self.root / "pull"
+        with patch.object(module, "_request_page", side_effect=duplicate):
+            with self.assertRaisesRegex(SnapshotError, "duplicate row ID"):
+                pull_snapshot(self.spec, destination, self.credentials)
+        self.assertEqual(len(list((destination / "pages" / "observations").glob("*.json"))), 1)
+
+    def test_pull_enforces_total_page_size_before_checkpoint(self) -> None:
+        destination = self.root / "pull"
+        with (
+            patch.object(module, "MAX_API_SNAPSHOT_BYTES", 1),
+            patch.object(module, "_request_page", side_effect=self._page),
+        ):
+            with self.assertRaisesRegex(SnapshotError, "64 MiB API snapshot limit"):
+                pull_snapshot(self.spec, destination, self.credentials)
+        self.assertEqual(list((destination / "pages" / "observations").glob("*.json")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

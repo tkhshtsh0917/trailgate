@@ -2,7 +2,7 @@
 
 `trailgate export sft` is a **candidate-only diagnostic projection** retained for v0.1 compatibility. It checks capture structure, Chat envelope, and a self-attested use manifest. It does not check answer quality, privacy, or data splits. Its rows say `eligibility: candidate_only`.
 
-Use `trailgate export dataset` for the v0.6 training view:
+Use `trailgate evaluate dataset` to preview gate counts and reasons without writing content. Use `trailgate export dataset` for the gated training view:
 
 ```sh
 uv run --locked trailgate export dataset private-archive \

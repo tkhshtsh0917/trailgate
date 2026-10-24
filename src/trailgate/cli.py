@@ -8,13 +8,15 @@ import os
 import sys
 from pathlib import Path
 
+from .archive import iter_archive_rows
 from .audit import export_graph, export_sft, export_steps, public_report
 from .bulk_archive import ingest_blob_export
 from .bulk_report import public_bulk_summary
 from .capture_recovery import recover_capture
+from .dataset_assessment import evaluate_dataset
 from .dataset_export import export_dataset
 from .pull import PullSpec, preview_pull, pull_snapshot
-from .snapshot import SnapshotError, ingest_snapshot, read_archive, read_snapshot
+from .snapshot import SnapshotError, ingest_snapshot, read_snapshot
 from .snapshot_input import _read_json
 
 
@@ -42,6 +44,19 @@ def _parser() -> argparse.ArgumentParser:
     inspect = commands.add_parser("inspect", help="Inspect observation structure for one trace.")
     inspect.add_argument("archive", type=Path)
     inspect.add_argument("--trace", required=True)
+    inspect.add_argument("--max-observations", type=int, default=1000)
+
+    evaluate = commands.add_parser(
+        "evaluate", help="Preview dataset gates without exporting content."
+    )
+    evaluate.add_argument("view", choices=["dataset"])
+    evaluate.add_argument("archive", type=Path)
+    evaluate.add_argument("--rights-file", type=Path, required=True)
+    evaluate.add_argument("--policy-file", type=Path, required=True)
+    evaluate.add_argument(
+        "--use", choices=["internal_training", "external_training"], required=True
+    )
+    evaluate.add_argument("--max-decisions", type=int, default=100)
 
     export = commands.add_parser("export", help="Export private diagnostics or gated datasets.")
     export.add_argument("view", choices=["steps", "graph", "sft", "dataset"])
@@ -81,21 +96,30 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _inspect_trace(archive_path: Path, trace_id: str) -> dict:
-    archive = read_archive(archive_path)
-    observations = [
-        {
-            "id": item["id"],
-            "parent_observation_id": item["parent_observation_id"],
-            "type": item["type"],
-            "start_time": item["start_time"],
-        }
-        for item in archive["observations"]
-        if item["trace_id"] == trace_id
-    ]
-    if not observations:
+def _inspect_trace(archive_path: Path, trace_id: str, max_observations: int) -> dict:
+    observations = []
+    total = 0
+    for item in iter_archive_rows(archive_path, "observations.jsonl"):
+        if item["trace_id"] != trace_id:
+            continue
+        total += 1
+        if len(observations) < max_observations:
+            observations.append(
+                {
+                    "id": item["id"],
+                    "parent_observation_id": item["parent_observation_id"],
+                    "type": item["type"],
+                    "start_time": item["start_time"],
+                }
+            )
+    if not total:
         raise SnapshotError(f"trace not found: {trace_id}")
-    return {"trace_id": trace_id, "observations": observations}
+    return {
+        "trace_id": trace_id,
+        "observations": observations,
+        "total_observations": total,
+        "omitted_observations": total - len(observations),
+    }
 
 
 def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> dict:
@@ -121,7 +145,17 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> d
         report["decisions"] = report["decisions"][: args.max_decisions]
         return report
     if args.command == "inspect":
-        return _inspect_trace(args.archive, args.trace)
+        if not 0 <= args.max_observations <= 10_000:
+            parser.error("--max-observations must be between 0 and 10000")
+        return _inspect_trace(args.archive, args.trace, args.max_observations)
+    if args.command == "evaluate":
+        return evaluate_dataset(
+            args.archive,
+            args.rights_file,
+            args.policy_file,
+            args.use,
+            max_decisions=args.max_decisions,
+        )
     if args.command == "capture-recover":
         return recover_capture(args.input, args.out)
     if args.command == "pull":

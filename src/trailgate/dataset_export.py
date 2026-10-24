@@ -7,18 +7,16 @@ import json
 import os
 import shutil
 import tempfile
-from collections import Counter, defaultdict
+from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from .archive import _validate_index
-from .dataset_policy import POLICY_SCHEMA, read_dataset_policy
-from .decision_audit import audit
+from .dataset_assessment import assess_dataset
+from .dataset_policy import POLICY_SCHEMA
 from .episode_graph import GRAPH_SCHEMA, build_episode_graph
-from .exports import _check_rights
 from .private_io import _private_bytes
-from .snapshot_input import SnapshotError, _read_json
+from .snapshot_input import SnapshotError
 
 DATASET_SCHEMA = "trailgate.dataset.v1"
 
@@ -36,31 +34,6 @@ def _write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> tuple[int, str]:
         output.flush()
         os.fsync(output.fileno())
     return count, digest.hexdigest()
-
-
-def _decision_gates(
-    decision: dict[str, Any], approved: set[str], splits: dict[str, dict[str, str]]
-) -> dict[str, Any]:
-    split = splits.get(decision["trace_id"])
-    gates = {
-        "structural": decision["candidate"],
-        "chat_format": decision["sft_projection_supported"],
-        "quality_manual_selection": decision["observation_id"] in approved,
-        "rights_attested": True,
-        "privacy_reviewed": True,
-        "split_recorded": split is not None,
-        "training_split": bool(split and split["split"] == "train"),
-    }
-    reasons = [f"structural:{reason}" for reason in decision["reasons"]]
-    reasons.extend(f"gate:{name}" for name, passed in gates.items() if not passed)
-    return {
-        "observation_id": decision["observation_id"],
-        "trace_id": decision["trace_id"],
-        "gates": gates,
-        "eligible_for_chat_sft": all(gates.values()),
-        "reasons": reasons,
-        "split": split,
-    }
 
 
 def _sft_rows(
@@ -169,19 +142,15 @@ def export_dataset(
     archive_path, destination = Path(archive_path), Path(destination)
     if destination.exists() or not destination.parent.is_dir():
         raise SnapshotError("dataset destination exists or its parent is missing")
-    index = _read_json(archive_path / "index.json")
-    _validate_index(archive_path, index)
-    report = audit(archive_path)
-    rights, rights_hash = _check_rights(Path(rights_path), use, report["snapshot_id"])
-    policy, policy_hash = read_dataset_policy(Path(policy_path), report["snapshot_id"], use)
+    assessment = assess_dataset(archive_path, rights_path, policy_path, use)
+    index = assessment["index"]
+    report = assessment["report"]
+    rights = assessment["rights"]
+    rights_hash = assessment["rights_hash"]
+    policy = assessment["policy"]
+    policy_hash = assessment["policy_hash"]
     decisions = report["decisions"]
-    known_ids = {item["observation_id"] for item in decisions}
-    approved = set(policy["quality"]["approved_observation_ids"])
-    if not approved <= known_ids:
-        raise SnapshotError("quality approval references an unknown generation")
-    splits = {item["trace_id"]: item for item in policy["splits"]}
-    evaluations = [_decision_gates(item, approved, splits) for item in decisions]
-    eligibility = {item["observation_id"]: item for item in evaluations}
+    eligibility = assessment["eligibility"]
     graph = build_episode_graph(archive_path)
 
     temporary = Path(tempfile.mkdtemp(prefix=".trailgate-dataset-", dir=destination.parent))
@@ -194,10 +163,7 @@ def export_dataset(
         episode_count, episode_hash = _write_jsonl(
             temporary / "episodes.jsonl", _episode_rows(graph, eligibility)
         )
-        reason_counts: Counter[str] = Counter()
-        for item in evaluations:
-            if not item["eligible_for_chat_sft"]:
-                reason_counts.update(item["reasons"])
+        reason_counts = assessment["reason_counts"]
         manifest = {
             "schema_version": DATASET_SCHEMA,
             "snapshot_id": report["snapshot_id"],
@@ -220,7 +186,7 @@ def export_dataset(
                 "rejected_chat_sft": len(decisions) - sft_count,
                 "episodes": episode_count,
             },
-            "rejected_reasons": dict(sorted(reason_counts.items())),
+            "rejected_reasons": reason_counts,
             "output_hashes": {"chat_sft.jsonl": sft_hash, "episodes.jsonl": episode_hash},
             "views": {
                 "chat_sft.jsonl": "gated_training_view",
@@ -240,5 +206,5 @@ def export_dataset(
         "eligible_chat_sft": sft_count,
         "rejected_chat_sft": len(decisions) - sft_count,
         "episodes": episode_count,
-        "reason_counts": dict(sorted(reason_counts.items())),
+        "reason_counts": reason_counts,
     }

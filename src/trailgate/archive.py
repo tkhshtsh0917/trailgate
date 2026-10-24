@@ -16,6 +16,8 @@ from .snapshot_input import SNAPSHOT_SCHEMA, SnapshotError, _parse_json, _read_j
 
 ARCHIVE_SCHEMA = "trailgate.archive.v1"
 BULK_ARCHIVE_SCHEMA = "trailgate.archive.v2"
+MAX_IN_MEMORY_OBSERVATIONS = 20_000
+MAX_IN_MEMORY_ARCHIVE_BYTES = 32 * 1024 * 1024
 
 
 def _hash_file(path: Path) -> str:
@@ -133,6 +135,10 @@ def _validate_index(path: Path, index: dict[str, Any]) -> None:
         raise SnapshotError("unsupported archive schema_version")
     if schema == BULK_ARCHIVE_SCHEMA and index.get("source_schema") != BLOB_SOURCE_SCHEMA:
         raise SnapshotError("invalid bulk archive source schema")
+    for count_name in ("observations", "scores"):
+        count = index.get(count_name)
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise SnapshotError(f"invalid archive {count_name} count")
     source_hashes = index.get("source_hashes")
     derived_hashes = index.get("derived_hashes")
     allowed_source = {"manifest.json", "observations.jsonl", "scores.jsonl", "capture.jsonl"}
@@ -217,9 +223,20 @@ def iter_archive_rows(path: Path, name: str):
 
 
 def read_archive(path: Path) -> dict[str, Any]:
+    """Load a small verified archive; use iter_archive_rows for large archives."""
     path = Path(path)
     index = _read_json(path / "index.json")
     _validate_index(path, index)
+    size = sum((path / name).stat().st_size for name in ("observations.jsonl", "scores.jsonl"))
+    capture = path / "raw" / "capture.jsonl"
+    if capture.is_file():
+        size += capture.stat().st_size
+    if index.get("observations", 0) > MAX_IN_MEMORY_OBSERVATIONS or (
+        size > MAX_IN_MEMORY_ARCHIVE_BYTES
+    ):
+        raise SnapshotError(
+            "archive exceeds the in-memory view limit; use streaming report or rows"
+        )
 
     return {
         "path": path,

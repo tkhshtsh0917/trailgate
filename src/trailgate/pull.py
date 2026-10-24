@@ -20,7 +20,14 @@ from typing import Any
 
 from .archive import _validate_index
 from .private_io import _private_bytes
-from .snapshot_input import SNAPSHOT_SCHEMA, SnapshotError, _parse_json, _read_json, read_snapshot
+from .snapshot_input import (
+    MAX_API_SNAPSHOT_BYTES,
+    SNAPSHOT_SCHEMA,
+    SnapshotError,
+    _parse_json,
+    _read_json,
+    read_snapshot,
+)
 
 PULL_SCHEMA = "trailgate.langfuse_pull.v1"
 MAX_API_PAGE_BYTES = 32 * 1024 * 1024
@@ -182,7 +189,7 @@ def _atomic_private_bytes(path: Path, data: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _page_state(directory: Path) -> tuple[int, str | None, bool]:
+def _page_state(directory: Path) -> tuple[int, str | None, bool, set[str], set[str]]:
     files = _page_files(directory)
     seen_ids = set()
     seen_cursors = set()
@@ -206,23 +213,28 @@ def _page_state(directory: Path) -> tuple[int, str | None, bool]:
                 raise SnapshotError("repeated pull checkpoint cursor")
             seen_cursors.add(cursor)
         for row in page["data"]:
-            if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+            if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"]:
                 raise SnapshotError("invalid row in pull checkpoint")
             if row["id"] in seen_ids:
                 raise SnapshotError("duplicate row in pull checkpoint")
             seen_ids.add(row["id"])
     last = files[-1] if files else None
     if last is None:
-        return 0, None, False
+        return 0, None, False, seen_ids, seen_cursors
     page = _parse_json(last.read_text(encoding="utf-8"), str(last))
     cursor = page["meta"].get("cursor")
-    return len(files), cursor, cursor is None
+    return len(files), cursor, cursor is None, seen_ids, seen_cursors
 
 
 def _collect_table(spec: PullSpec, root: Path, table: str, credentials: tuple[str, str]) -> int:
     directory = root / "pages" / table
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-    count, cursor, complete = _page_state(directory)
+    count, cursor, complete, seen_ids, seen_cursors = _page_state(directory)
+    saved_bytes = sum(
+        page_file.stat().st_size
+        for saved_table in TABLES
+        for page_file in (root / "pages" / saved_table).glob("*.json")
+    )
     while not complete:
         if count >= spec.max_pages:
             raise SnapshotError(f"{table} reached max_pages; checkpoint remains incomplete")
@@ -236,10 +248,10 @@ def _collect_table(spec: PullSpec, root: Path, table: str, credentials: tuple[st
         meta = page.get("meta")
         next_cursor = meta.get("cursor") if isinstance(meta, dict) else None
         if not isinstance(meta, dict) or (
-            next_cursor is not None and not isinstance(next_cursor, str)
+            next_cursor is not None and (not isinstance(next_cursor, str) or not next_cursor)
         ):
             raise SnapshotError(f"{table} page has invalid meta.cursor")
-        if next_cursor == cursor and next_cursor is not None:
+        if next_cursor is not None and next_cursor in seen_cursors:
             raise SnapshotError(f"{table} returned a repeated cursor")
         for row in page["data"]:
             if not isinstance(row, dict) or row.get("projectId") != spec.project_id:
@@ -259,9 +271,20 @@ def _collect_table(spec: PullSpec, root: Path, table: str, credentials: tuple[st
                 )
                 if subject_trace != spec.trace_id:
                     raise SnapshotError("score page has a row outside trace_id")
+            row_id = row.get("id")
+            if not isinstance(row_id, str) or not row_id or row_id in seen_ids:
+                raise SnapshotError(f"{table} page has missing or duplicate row ID")
+            seen_ids.add(row_id)
+        if saved_bytes + len(raw) > MAX_API_SNAPSHOT_BYTES:
+            raise SnapshotError("pull exceeds the 64 MiB API snapshot limit")
         digest = hashlib.sha256(raw).hexdigest()
         _atomic_private_bytes(directory / f"{count:06d}.{digest}.json", raw)
-        count, cursor, complete = _page_state(directory)
+        saved_bytes += len(raw)
+        count += 1
+        cursor = next_cursor
+        complete = cursor is None
+        if cursor is not None:
+            seen_cursors.add(cursor)
     return count
 
 

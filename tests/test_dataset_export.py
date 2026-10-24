@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from trailgate.dataset_assessment import evaluate_dataset
 from trailgate.dataset_export import export_dataset
 from trailgate.snapshot import SnapshotError, ingest_snapshot
 
@@ -45,10 +46,16 @@ class DatasetExportTests(unittest.TestCase):
 
     def test_gated_dataset_is_deterministic_and_has_lineage(self) -> None:
         self._prepare()
+        preview = evaluate_dataset(
+            self.archive, self.rights, self.policy, "internal_training", max_decisions=1
+        )
         one, two = self.root / "dataset-one", self.root / "dataset-two"
         result = export_dataset(self.archive, self.rights, self.policy, "internal_training", one)
         export_dataset(self.archive, self.rights, self.policy, "internal_training", two)
         self.assertEqual(result["eligible_chat_sft"], 2)
+        self.assertEqual(preview["eligible_chat_sft"], result["eligible_chat_sft"])
+        self.assertEqual(preview["omitted_decisions"], 1)
+        self.assertNotIn("Synthetic evidence.", json.dumps(preview))
         for name in ("chat_sft.jsonl", "episodes.jsonl", "manifest.json"):
             self.assertEqual((one / name).read_bytes(), (two / name).read_bytes())
 

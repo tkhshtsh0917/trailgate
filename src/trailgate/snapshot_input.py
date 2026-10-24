@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 SNAPSHOT_SCHEMA = "trailgate.langfuse_api_snapshot.v1"
+MAX_API_SNAPSHOT_BYTES = 64 * 1024 * 1024
 OBSERVATION_FIELDS = {
     "id",
     "traceId",
@@ -274,6 +275,10 @@ def _validate_scores(scores: list[dict[str, Any]], query_range: tuple[datetime, 
 def read_snapshot(source: Path) -> dict[str, Any]:
     """Validate a complete snapshot without contacting Langfuse."""
     source = Path(source)
+    names = ("manifest.json", "observations.jsonl", "scores.jsonl", "capture.jsonl")
+    total_bytes = sum((source / name).stat().st_size for name in names if (source / name).is_file())
+    if total_bytes > MAX_API_SNAPSHOT_BYTES:
+        raise SnapshotError("API snapshot exceeds the 64 MiB in-memory input limit")
     manifest = _read_json(source / "manifest.json")
     ranges = _validate_manifest(manifest)
 
