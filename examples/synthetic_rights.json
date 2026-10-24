@@ -1,0 +1,10 @@
+{
+  "schema_version": "trailgate.use_manifest.v1",
+  "attested_by": "Trailgate synthetic fixture authors",
+  "confirmed_at": "2026-10-24",
+  "permissions": {
+    "task_input": ["internal_training", "external_training"],
+    "model_output": ["internal_training", "external_training"],
+    "tool_result": ["internal_training", "external_training"]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": "trailgate.langfuse_api_snapshot.v1",
+  "source": "langfuse",
+  "observations_api": "v2",
+  "scores_api": "v3",
+  "observation_fields": ["core", "basic", "io", "metadata", "model"],
+  "score_fields": ["details", "subject"],
+  "query": {
+    "fromStartTime": "2026-10-01T00:00:00Z",
+    "toStartTime": "2026-10-02T00:00:00Z"
+  },
+  "score_query": {
+    "fromTimestamp": "2026-10-01T00:00:00Z",
+    "toTimestamp": "2026-10-02T00:00:00Z"
+  },
+  "complete": true,
+  "fixture": "entirely synthetic; no real model or Langfuse account was used"
+}

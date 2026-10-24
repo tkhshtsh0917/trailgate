@@ -1,0 +1,1 @@
+{"data":[{"id":"score-example","projectId":"project-example","name":"toy-success","value":true,"dataType":"BOOLEAN","source":"API","timestamp":"2026-10-01T00:00:06Z","environment":"test","createdAt":"2026-10-01T00:00:06Z","updatedAt":"2026-10-01T00:00:06Z","subject":{"kind":"trace","id":"trace-example"}}],"meta":{"cursor":null}}
