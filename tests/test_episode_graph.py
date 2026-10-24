@@ -78,6 +78,15 @@ class EpisodeGraphTests(unittest.TestCase):
         self.assertEqual(graph["episodes"][0]["boundary"], "unknown")
         self.assertEqual(len(graph["traces"]), 2)
 
+    def test_session_score_resolves_to_session_episode(self) -> None:
+        def retarget_score(page):
+            page["data"][0]["subject"] = {"kind": "session", "id": "session-example"}
+
+        self._change_page("scores.jsonl", retarget_score)
+        graph = self._graph()
+        self.assertEqual(graph["score_links"][0]["subject_kind"], "session")
+        self.assertTrue(graph["score_links"][0]["resolved"])
+
     def test_parallel_calls_and_orphaned_tool_are_explicit(self) -> None:
         def add_tools(page):
             for name in ("tool-second", "tool-orphan"):

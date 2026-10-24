@@ -245,9 +245,16 @@ def build_episode_graph(path: str | Path) -> dict[str, Any]:
                 if key[1] == subject_id and (score_project is None or key[0] == score_project)
             ]
             resolved = len(matches) == 1
+        elif kind == "session" and isinstance(subject_id, str):
+            resolved = (
+                score_project,
+                "session",
+                subject_id,
+            ) in episode_by_scope
         score_links.append(
             {
                 "score_id": score["id"],
+                "project_id": score_project,
                 "subject_kind": kind,
                 "subject_id": subject_id,
                 "resolved": resolved,

@@ -96,6 +96,7 @@ def _validate_delivery(
     call_id: str,
     deliveries: list[dict[str, Any]],
     observations_by_id: dict[str, dict[str, Any]],
+    project_id: str,
     trace_id: str,
     reasons: list[str],
 ) -> None:
@@ -113,6 +114,7 @@ def _validate_delivery(
         "value" not in delivery
         or tool_observation is None
         or tool_observation.get("type") != "TOOL"
+        or tool_observation.get("project_id") != project_id
         or tool_observation.get("trace_id") != trace_id
     ):
         reasons.append("unverified_tool_delivery")
@@ -123,6 +125,7 @@ def _validate_tool_calls(
     begin: dict[str, Any] | None,
     deliveries: list[dict[str, Any]],
     observations_by_id: dict[str, dict[str, Any]],
+    project_id: str,
     trace_id: str,
     reasons: list[str],
 ) -> None:
@@ -153,7 +156,7 @@ def _validate_tool_calls(
     if len(set(call_ids)) != len(call_ids):
         reasons.append("duplicate_tool_call_id")
     for call_id in call_ids:
-        _validate_delivery(call_id, deliveries, observations_by_id, trace_id, reasons)
+        _validate_delivery(call_id, deliveries, observations_by_id, project_id, trace_id, reasons)
     if any(event.get("call_id") not in call_ids for event in deliveries):
         reasons.append("unexpected_tool_delivery")
 
@@ -163,6 +166,7 @@ def _validate_finish(
     begin: dict[str, Any] | None,
     deliveries: list[dict[str, Any]],
     observations_by_id: dict[str, dict[str, Any]],
+    project_id: str,
     trace_id: str,
     reasons: list[str],
 ) -> None:
@@ -183,7 +187,9 @@ def _validate_finish(
         and not valid_message(assistant, assistant_only=True)
     ):
         reasons.append("invalid_chat_assistant_message")
-    _validate_tool_calls(assistant, begin, deliveries, observations_by_id, trace_id, reasons)
+    _validate_tool_calls(
+        assistant, begin, deliveries, observations_by_id, project_id, trace_id, reasons
+    )
 
 
 def _decision(
@@ -225,7 +231,13 @@ def _decision(
         else:
             finish = finishes[0]
             _validate_finish(
-                finish, begin, deliveries, observations_by_id, row["trace_id"], reasons
+                finish,
+                begin,
+                deliveries,
+                observations_by_id,
+                row["project_id"],
+                row["trace_id"],
+                reasons,
             )
 
         if begin is not None and finish is not None:

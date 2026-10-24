@@ -5,7 +5,9 @@ import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
+from trailgate import capture as module
 from trailgate.capture import MAX_CAPTURE_EVENT_BYTES, CaptureWriter
 from trailgate.capture_recovery import recover_capture
 from trailgate.snapshot import SnapshotError
@@ -77,6 +79,15 @@ class CaptureRecoveryTests(unittest.TestCase):
                 messages=[{"role": "user", "content": "x" * MAX_CAPTURE_EVENT_BYTES}],
                 tools=[],
             )
+        self.assertFalse(source.exists())
+
+    def test_capture_writer_fails_explicitly_without_posix_locking(self) -> None:
+        source = self.root / "capture.jsonl"
+        with patch.object(module, "fcntl", None):
+            with self.assertRaisesRegex(OSError, "requires POSIX file locking"):
+                CaptureWriter(source).begin_decision(
+                    messages=[{"role": "user", "content": "Fictional"}], tools=[]
+                )
         self.assertFalse(source.exists())
 
 

@@ -1,4 +1,4 @@
-"""Trailgate command-line interface. No network or model calls."""
+"""Trailgate command-line interface; only explicit pull uses the network."""
 
 from __future__ import annotations
 

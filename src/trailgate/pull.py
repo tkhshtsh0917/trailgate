@@ -18,9 +18,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .archive import read_archive
+from .archive import _validate_index
 from .private_io import _private_bytes
-from .snapshot_input import SNAPSHOT_SCHEMA, SnapshotError, _parse_json, read_snapshot
+from .snapshot_input import SNAPSHOT_SCHEMA, SnapshotError, _parse_json, _read_json, read_snapshot
 
 PULL_SCHEMA = "trailgate.langfuse_pull.v1"
 MAX_API_PAGE_BYTES = 32 * 1024 * 1024
@@ -125,7 +125,7 @@ def _request_page(
     url = spec.base_url.rstrip("/") + ENDPOINTS[table] + "?" + urllib.parse.urlencode(params)
     auth = base64.b64encode(f"{credentials[0]}:{credentials[1]}".encode()).decode()
     request = urllib.request.Request(url, headers={"Authorization": f"Basic {auth}"})
-    opener = urllib.request.build_opener(_NoRedirect)
+    opener = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
 
     for attempt in range(4):
         try:
@@ -317,6 +317,30 @@ def _validate_materialized(root: Path, manifest_bytes: bytes) -> dict[str, Any]:
         shutil.rmtree(temporary)
 
 
+def _previous_snapshot_id(path: Path, spec: PullSpec) -> str:
+    index = _read_json(path / "index.json")
+    _validate_index(path, index)
+    if index.get("source_schema") != SNAPSHOT_SCHEMA:
+        raise SnapshotError("previous archive must be a Langfuse API snapshot")
+
+    previous = _read_json(path / "raw" / "manifest.json")
+    collection = previous.get("collection")
+    if not isinstance(collection, dict) or collection.get("schema_version") != PULL_SCHEMA:
+        raise SnapshotError("previous archive has no verified pull scope")
+    matching = (
+        collection.get("project_id") == spec.project_id
+        and collection.get("trace_id") == spec.trace_id
+        and previous.get("query") == {"fromStartTime": spec.from_time, "toStartTime": spec.to_time}
+        and previous.get("score_query")
+        == {"fromTimestamp": spec.from_time, "toTimestamp": spec.to_time}
+        and previous.get("observation_fields") == list(spec.observation_fields)
+        and previous.get("score_fields") == list(spec.score_fields)
+    )
+    if not matching:
+        raise SnapshotError("previous pull scope differs from requested revision")
+    return index["snapshot_id"]
+
+
 def pull_snapshot(
     spec: PullSpec,
     destination: str | Path,
@@ -333,7 +357,7 @@ def pull_snapshot(
     if not destination.parent.is_dir():
         raise SnapshotError("pull destination parent does not exist")
     revision_of = (
-        read_archive(Path(previous_archive))["index"]["snapshot_id"]
+        _previous_snapshot_id(Path(previous_archive), spec)
         if previous_archive is not None
         else None
     )

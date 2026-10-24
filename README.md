@@ -22,7 +22,7 @@ uv run --locked trailgate export dataset private-example \
   --use internal_training --out private-dataset
 ```
 
-The synthetic fixture contains two Chat SFT decisions. The sample rights and policy files apply only to this exact fictional snapshot ID. `private-*` outputs are ignored by Git; archive and dataset directories use mode `0700`, and files use `0600`. Existing outputs are never overwritten.
+The synthetic fixture contains two Chat SFT decisions. The sample rights and policy files apply only to this exact fictional snapshot ID. `private-*` outputs are ignored by Git; on POSIX hosts archive and dataset directories use mode `0700`, and files use `0600`. Existing outputs are never overwritten.
 
 `trailgate export sft` remains a **candidate-only diagnostic** for compatibility. It does not apply quality, privacy, or split gates. For a training view, use `export dataset` and inspect its `manifest.json` and rejected decision reasons. See [dataset eligibility](docs/DATASET.md).
 
@@ -47,7 +47,7 @@ Langfuse observations alone do not prove the exact messages or tool schemas sent
 
 `faithful_candidates` is a **structural capture count**, not a correctness or rights judgment. The current Chat SFT projection supports text and function calls; multimodal parts, legacy function calls, and provider-specific Chat fields are excluded. Provider-native Responses data stays opaque in the private archive and generic episode view. The tool envelope is checked, but full JSON Schema semantics and model-specific chat templates are outside this release.
 
-The dataset view requires manually selected generation IDs, separate use attestations for task input/model output/tool result, an explicit privacy review with no sensitive content, and trace-to-task split evidence. These are self-attestations: Trailgate cannot independently certify answer quality, legal permission, privacy, or that the application captured at the correct instant. Automatic redaction, exact episode boundaries, multi-source log ingestion, token-level loss masks, preference/RL rollout export, and model training remain outside v0.6.0.
+The dataset view requires manually selected generation IDs, separate use attestations for task input/model output/tool result, an explicit privacy review with no sensitive content, and trace-to-task split evidence. These are self-attestations: Trailgate cannot independently certify answer quality, legal permission, privacy, or that the application captured at the correct instant. Automatic redaction, exact episode boundaries, multi-source log ingestion, token-level loss masks, preference/RL rollout export, and model training remain outside v0.2.0.
 
 Optional [live diagnostics](examples/live/README.md) use a self-hosted Langfuse instance and, only when explicitly run, a model API or official MuSiQue train corpus. Tests and the core package use fictional data and make no model calls.
 

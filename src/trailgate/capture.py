@@ -6,7 +6,6 @@ application attaches the returned ID to its Langfuse generation metadata.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import stat
@@ -14,6 +13,11 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl
+except ModuleNotFoundError:  # pragma: no cover - exercised on non-POSIX hosts
+    fcntl = None
 
 CAPTURE_SCHEMA = "trailgate.capture.v1"
 MAX_CAPTURE_EVENT_BYTES = 8 * 1024 * 1024
@@ -28,6 +32,8 @@ class CaptureWriter:
             raise PermissionError(f"capture file must be private (0600): {self.path}")
 
     def _append(self, event: dict[str, Any]) -> None:
+        if fcntl is None:
+            raise OSError("capture writing requires POSIX file locking")
         event["schema_version"] = CAPTURE_SCHEMA
         event["recorded_at"] = datetime.now(UTC).isoformat()
         data = (json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n").encode()

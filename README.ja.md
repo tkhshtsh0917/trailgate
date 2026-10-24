@@ -22,7 +22,7 @@ uv run --locked trailgate export dataset private-example \
   --use internal_training --out private-dataset
 ```
 
-架空の fixture には Chat SFT 対象の decision が 2 件あります。付属の権利申告とポリシーは、**この架空 snapshot ID にだけ**適用されます。`private-*` は Git から除外し、出力ディレクトリを `0700`、ファイルを `0600` で作成します。既存の出力は上書きしません。
+架空の fixture には Chat SFT 対象の decision が 2 件あります。付属の権利申告とポリシーは、**この架空 snapshot ID にだけ**適用されます。`private-*` は Git から除外し、POSIX 環境では出力ディレクトリを `0700`、ファイルを `0600` で作成します。既存の出力は上書きしません。
 
 従来の `trailgate export sft` は互換性のため残した**候補診断用**です。品質・プライバシー・split は確認しません。学習用の判定には `export dataset` を使い、`manifest.json` と除外理由を確認してください。詳細は[データセット適格性](docs/DATASET.md)を参照してください。
 
@@ -41,7 +41,7 @@ uv run --locked trailgate export dataset private-example \
 
 `faithful_candidates` は capture の**構造上の整合性**だけを表し、正答率や利用権の認定ではありません。Chat SFT はテキストと function call の範囲に対応します。provider-native の Responses 記録は元の形で archive と一般形式 episode に残し、Chat へ暗黙に変換しません。
 
-学習用データセットには、generation ID ごとの手動品質選択、task input・model output・tool result それぞれの利用許可、機微情報なしという明示的なプライバシー確認、task 単位の split 記録が必要です。これらは利用者の自己申告であり、Trailgate が品質・法的権利・プライバシーを独立に保証するものではありません。自動墨消し、完全な episode 境界、複数ログソースの取り込み、token 単位の loss mask、RL rollout 出力、モデル学習は v0.6.0 の範囲外です。
+学習用データセットには、generation ID ごとの手動品質選択、task input・model output・tool result それぞれの利用許可、機微情報なしという明示的なプライバシー確認、task 単位の split 記録が必要です。これらは利用者の自己申告であり、Trailgate が品質・法的権利・プライバシーを独立に保証するものではありません。自動墨消し、完全な episode 境界、複数ログソースの取り込み、token 単位の loss mask、RL rollout 出力、モデル学習は v0.2.0 の範囲外です。
 
 [任意の live 診断](examples/live/README.md)は、明示して実行した場合だけ self-hosted Langfuse、モデル API、または MuSiQue の公式 train データを使います。本体とテストは架空データで動き、モデル API を呼びません。
 

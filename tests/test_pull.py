@@ -81,13 +81,15 @@ class PullTests(unittest.TestCase):
             open = staticmethod(respond)
 
         with (
-            patch.object(module.urllib.request, "build_opener", return_value=Opener()),
+            patch.object(module.urllib.request, "build_opener", return_value=Opener()) as opener,
             patch.object(module.time, "sleep") as sleep,
         ):
             body = module._request_page(self.spec, "observations", None, self.credentials)
         self.assertIn(b'"cursor":null', body)
         self.assertEqual(len(requests), 2)
         self.assertEqual(requests[0].get_method(), "GET")
+        self.assertIsInstance(opener.call_args.args[1], module.urllib.request.ProxyHandler)
+        self.assertEqual(opener.call_args.args[1].proxies, {})
         self.assertIn("/api/public/v2/observations?", requests[0].full_url)
         self.assertEqual(
             requests[0].get_header("Authorization"),
@@ -159,6 +161,34 @@ class PullTests(unittest.TestCase):
         self.assertEqual(second_result["revision_of_snapshot_id"], first_result["snapshot_id"])
         self.assertEqual(read_archive(archive)["index"]["source_hashes"], original_hashes)
         self.assertEqual(second_result["scores"], 1)
+
+    def test_revision_rejects_different_prior_scope(self) -> None:
+        first = self.root / "first"
+        with patch.object(module, "_request_page", side_effect=self._page):
+            pull_snapshot(self.spec, first, self.credentials)
+        archive = self.root / "archive"
+        ingest_snapshot(first, archive)
+
+        other_scope = PullSpec(**{**self.spec.__dict__, "to_time": "2026-10-03T00:00:00Z"})
+        with self.assertRaisesRegex(SnapshotError, "previous pull scope differs"):
+            pull_snapshot(
+                other_scope,
+                self.root / "second",
+                self.credentials,
+                previous_archive=archive,
+            )
+        self.assertFalse((self.root / "second").exists())
+
+    def test_revision_requires_verified_pull_provenance(self) -> None:
+        archive = self.root / "offline-archive"
+        ingest_snapshot(FIXTURE, archive)
+        with self.assertRaisesRegex(SnapshotError, "no verified pull scope"):
+            pull_snapshot(
+                self.spec,
+                self.root / "second",
+                self.credentials,
+                previous_archive=archive,
+            )
 
     def test_scope_mismatch_keeps_checkpoint_incomplete(self) -> None:
         self.observations = [{**OBSERVATIONS[0], "projectId": "other-project"}]

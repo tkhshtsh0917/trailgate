@@ -54,13 +54,34 @@ class DatasetExportTests(unittest.TestCase):
 
         manifest = json.loads((one / "manifest.json").read_text())
         self.assertEqual(manifest["counts"]["episodes"], 1)
+        self.assertEqual(manifest["views"]["episodes.jsonl"], "diagnostic_only")
         self.assertEqual(manifest["split_evidence"][0]["task_id"], "fictional-task")
+        episode = json.loads((one / "episodes.jsonl").read_text())
+        self.assertEqual(episode["eligibility"], "diagnostic_only")
         rows = [json.loads(line) for line in (one / "chat_sft.jsonl").read_text().splitlines()]
         self.assertEqual(
             {row["source"]["observation_id"] for row in rows}, {"gen-search", "gen-answer"}
         )
         search = next(row for row in rows if row["source"]["observation_id"] == "gen-search")
         self.assertNotIn("Synthetic evidence.", json.dumps(search["messages"]))
+
+    def test_chat_request_parameters_are_retained_when_recorded(self) -> None:
+        def add_parameters(events):
+            begin = next(
+                event
+                for event in events
+                if event["capture_id"] == "cap-search" and event["kind"] == "begin"
+            )
+            begin["request_parameters"] = {"tool_choice": "required"}
+
+        self._prepare(mutate_capture=add_parameters)
+        destination = self.root / "dataset"
+        export_dataset(self.archive, self.rights, self.policy, "internal_training", destination)
+        rows = [
+            json.loads(line) for line in (destination / "chat_sft.jsonl").read_text().splitlines()
+        ]
+        search = next(row for row in rows if row["source"]["observation_id"] == "gen-search")
+        self.assertEqual(search["request_parameters"], {"tool_choice": "required"})
 
     def test_score_does_not_replace_explicit_quality_selection(self) -> None:
         self._prepare()
@@ -72,6 +93,32 @@ class DatasetExportTests(unittest.TestCase):
         self.assertEqual(result["eligible_chat_sft"], 0)
         self.assertEqual(result["reason_counts"]["gate:quality_manual_selection"], 2)
         self.assertEqual((destination / "chat_sft.jsonl").read_bytes(), b"")
+
+    def test_session_score_stays_with_generic_episode(self) -> None:
+        scores = self.source / "scores.jsonl"
+        page = json.loads(scores.read_text())
+        page["data"][0]["subject"] = {"kind": "session", "id": "session-example"}
+        scores.write_text(json.dumps(page) + "\n")
+        self._prepare()
+
+        destination = self.root / "dataset"
+        export_dataset(self.archive, self.rights, self.policy, "internal_training", destination)
+        episode = json.loads((destination / "episodes.jsonl").read_text())
+        self.assertEqual(episode["score_links"][0]["subject_kind"], "session")
+        self.assertTrue(episode["score_links"][0]["resolved"])
+
+    def test_other_project_session_score_is_not_attached(self) -> None:
+        scores = self.source / "scores.jsonl"
+        page = json.loads(scores.read_text())
+        page["data"][0]["subject"] = {"kind": "session", "id": "session-example"}
+        page["data"][0]["projectId"] = "another-fictional-project"
+        scores.write_text(json.dumps(page) + "\n")
+        self._prepare()
+
+        destination = self.root / "dataset"
+        export_dataset(self.archive, self.rights, self.policy, "internal_training", destination)
+        episode = json.loads((destination / "episodes.jsonl").read_text())
+        self.assertEqual(episode["score_links"], [])
 
     def test_missing_split_or_delivery_rejects_only_affected_decisions(self) -> None:
         def remove_delivery(events):

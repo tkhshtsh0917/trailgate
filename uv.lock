@@ -760,7 +760,7 @@ wheels = [
 
 [[package]]
 name = "trailgate"
-version = "0.6.0"
+version = "0.2.0"
 source = { editable = "." }
 
 [package.optional-dependencies]

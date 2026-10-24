@@ -1,6 +1,6 @@
 [project]
 name = "trailgate"
-version = "0.6.0"
+version = "0.2.0"
 description = "Collect, audit, and prepare Langfuse agent trajectories with explicit training gates."
 readme = "README.md"
 license = "MIT"

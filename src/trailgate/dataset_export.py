@@ -80,6 +80,7 @@ def _sft_rows(
             "schema_version": "trailgate.chat_sft.v1",
             "messages": [*begin["messages"], finish["assistant_message"]],
             "tools": begin["tools"],
+            "request_parameters": begin.get("request_parameters"),
             "target": "last_assistant_message",
             "source": {
                 "snapshot_id": snapshot_id,
@@ -101,7 +102,7 @@ def _episode_rows(
     decisions_by_episode: dict[str, list[dict[str, Any]]] = defaultdict(list)
     actions_by_decision: dict[str, list[dict[str, Any]]] = defaultdict(list)
     deliveries_by_action: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    scores_by_subject: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    scores_by_subject: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for decision in graph["decisions"]:
         decisions_by_episode[decision["episode_id"]].append(decision)
     for action in graph["actions"]:
@@ -110,9 +111,12 @@ def _episode_rows(
         deliveries_by_action[delivery["action_id"]].append(delivery)
     for link in graph["score_links"]:
         if isinstance(link["subject_kind"], str) and isinstance(link["subject_id"], str):
-            scores_by_subject[(link["subject_kind"], link["subject_id"])].append(link)
+            scores_by_subject[
+                (link["project_id"], link["subject_kind"], link["subject_id"])
+            ].append(link)
 
     for episode in graph["episodes"]:
+        project_id = episode["scope"]["project_id"]
         decisions = decisions_by_episode[episode["id"]]
         actions = [
             action for decision in decisions for action in actions_by_decision[decision["id"]]
@@ -123,21 +127,26 @@ def _episode_rows(
         score_links = [
             score
             for trace_id in episode["trace_ids"]
-            for score in scores_by_subject[("trace", trace_id)]
+            for score in scores_by_subject[(project_id, "trace", trace_id)]
         ]
+        if episode["scope"]["kind"] == "session":
+            score_links.extend(scores_by_subject[(project_id, "session", episode["scope"]["id"])])
         score_links.extend(
             score
             for decision in decisions
-            for score in scores_by_subject[("observation", decision["observation_id"])]
+            for score in scores_by_subject[(project_id, "observation", decision["observation_id"])]
         )
         score_links.extend(
             score
             for delivery in deliveries
             if delivery["tool_observation_id"]
-            for score in scores_by_subject[("observation", delivery["tool_observation_id"])]
+            for score in scores_by_subject[
+                (project_id, "observation", delivery["tool_observation_id"])
+            ]
         )
         yield {
             "schema_version": GRAPH_SCHEMA,
+            "eligibility": "diagnostic_only",
             "snapshot_id": graph["snapshot_id"],
             "episode": episode,
             "decisions": [
@@ -213,6 +222,10 @@ def export_dataset(
             },
             "rejected_reasons": dict(sorted(reason_counts.items())),
             "output_hashes": {"chat_sft.jsonl": sft_hash, "episodes.jsonl": episode_hash},
+            "views": {
+                "chat_sft.jsonl": "gated_training_view",
+                "episodes.jsonl": "diagnostic_only",
+            },
         }
         _private_bytes(
             temporary / "manifest.json",

@@ -214,6 +214,17 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(report["faithful_candidates"], 1)
         self.assertEqual(report["reason_counts"]["unverified_tool_delivery"], 1)
 
+    def test_tool_delivery_from_other_project_is_not_faithful(self) -> None:
+        def change(page):
+            tool = next(row for row in page["data"] if row["id"] == "tool-search")
+            tool["projectId"] = "another-fictional-project"
+
+        self._rewrite_pages("observations.jsonl", change)
+        ingest_snapshot(self.source, self.archive)
+        report = public_report(self.archive)
+        self.assertEqual(report["faithful_candidates"], 1)
+        self.assertEqual(report["reason_counts"]["unverified_tool_delivery"], 1)
+
     def test_tool_call_not_in_declared_schema_is_rejected(self) -> None:
         capture = self.source / "capture.jsonl"
         events = [json.loads(line) for line in capture.read_text().splitlines()]
