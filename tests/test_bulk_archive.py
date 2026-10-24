@@ -122,6 +122,17 @@ class BulkArchiveTests(unittest.TestCase):
             hashlib.sha256((self.objects / source_key).read_bytes()).hexdigest(),
         )
 
+    def test_bulk_summary_rejects_count_mismatch(self) -> None:
+        archive_path = self.root / "archive"
+        ingest_blob_export(self.objects, self.manifest_path, archive_path)
+        index_file = archive_path / "index.json"
+        index = json.loads(index_file.read_text())
+        index["scores"] = 0
+        index_file.write_text(json.dumps(index))
+
+        with self.assertRaisesRegex(SnapshotError, "scores.jsonl count differs"):
+            public_bulk_summary(archive_path)
+
     def test_optional_parquet_stream(self) -> None:
         try:
             import pyarrow as arrow

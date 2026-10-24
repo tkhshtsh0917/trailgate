@@ -59,6 +59,7 @@ uv run --locked ruff format --check src tests examples scripts
 uv run --locked python -m unittest discover -s tests -q
 uv run --locked --extra bulk-parquet python -m unittest discover -s tests -q
 uv build
+uv run --locked python scripts/check_release_artifacts.py
 uv run --locked python scripts/check_public_files.py
 uv run --locked python scripts/benchmark_bulk.py --rows 100000
 ```

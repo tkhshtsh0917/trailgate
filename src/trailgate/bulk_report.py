@@ -23,6 +23,8 @@ def public_bulk_summary(path: str | Path) -> dict[str, Any]:
         traces.add((row["project_id"], row["trace_id"]))
         if row["type"] == "GENERATION":
             generations += 1
+    for _ in iter_archive_rows(path, "scores.jsonl"):
+        pass
 
     return {
         "snapshot_id": index["snapshot_id"],

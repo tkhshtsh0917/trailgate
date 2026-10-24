@@ -133,6 +133,8 @@ def _validate_index(path: Path, index: dict[str, Any]) -> None:
     schema = index.get("schema_version")
     if schema not in {ARCHIVE_SCHEMA, BULK_ARCHIVE_SCHEMA}:
         raise SnapshotError("unsupported archive schema_version")
+    if schema == ARCHIVE_SCHEMA and index.get("source_schema") != SNAPSHOT_SCHEMA:
+        raise SnapshotError("invalid API archive source schema")
     if schema == BULK_ARCHIVE_SCHEMA and index.get("source_schema") != BLOB_SOURCE_SCHEMA:
         raise SnapshotError("invalid bulk archive source schema")
     for count_name in ("observations", "scores"):
@@ -207,19 +209,24 @@ def _archive_rows(path: Path, name: str) -> list[dict[str, Any]]:
 def iter_archive_rows(path: Path, name: str):
     """Stream validated normalized rows after source and derived hash checks."""
     path = Path(path)
-    _validate_index(path, _read_json(path / "index.json"))
+    index = _read_json(path / "index.json")
+    _validate_index(path, index)
     file = path / name
     if name not in {"observations.jsonl", "scores.jsonl"}:
         raise SnapshotError("unsupported archive row file")
+    count = 0
     try:
         with file.open("r", encoding="utf-8") as stream:
             for line_no, line in enumerate(stream, 1):
                 item = _parse_json(line, f"{file}:{line_no}")
                 if not isinstance(item, dict):
                     raise SnapshotError(f"{file}:{line_no}: expected an object")
+                count += 1
                 yield item
     except UnicodeError as exc:
         raise SnapshotError(f"cannot read {file}: {exc}") from exc
+    if count != index[name.removesuffix(".jsonl")]:
+        raise SnapshotError(f"archive {name} count differs from index")
 
 
 def read_archive(path: Path) -> dict[str, Any]:
@@ -238,9 +245,14 @@ def read_archive(path: Path) -> dict[str, Any]:
             "archive exceeds the in-memory view limit; use streaming report or rows"
         )
 
+    observations = _archive_rows(path, "observations.jsonl")
+    scores = _archive_rows(path, "scores.jsonl")
+    if len(observations) != index["observations"] or len(scores) != index["scores"]:
+        raise SnapshotError("archive row count differs from index")
+
     return {
         "path": path,
         "index": index,
-        "observations": _archive_rows(path, "observations.jsonl"),
-        "scores": _archive_rows(path, "scores.jsonl"),
+        "observations": observations,
+        "scores": scores,
     }

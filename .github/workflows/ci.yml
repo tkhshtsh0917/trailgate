@@ -42,5 +42,7 @@ jobs:
         run: uv run --locked trailgate doctor --source langfuse --input examples/synthetic/snapshot
       - name: Build
         run: uv build
+      - name: Release artifact contract
+        run: uv run --locked python scripts/check_release_artifacts.py
       - name: Public files
         run: uv run --locked python scripts/check_public_files.py
