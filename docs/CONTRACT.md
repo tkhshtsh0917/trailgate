@@ -29,8 +29,8 @@ The v0.2 `export sft` output is still candidate-only and must not be relabeled a
 | Surface | Tested locally | Contract and limits |
 |---|---|---|
 | Python | CPython 3.12.13, 3.13.15, and 3.14.7 with clean wheel installs, fictional CLI smoke checks, and the local unit suite | Declared range is `>=3.12.13,<3.15`; CI runs the suite on all three. Core is standard-library only. Optional Parquet requires `pyarrow>=26,<27` and runs in CI on 3.12.13. |
-| Langfuse self-hosted | 4.56.0 with Observations v2 / Scores v3, fictional trace and score | REST read path was exercised against this server. Other server versions implementing the same endpoints have not been live-tested here. [Langfuse versioning](https://langfuse.com/self-hosting/upgrade/versioning) documents endpoint availability. |
-| Langfuse Python SDK | 4.18.0 in optional local diagnostics | The core collector uses REST and has no SDK dependency. SDK 5 was not tested; the local server version is below Langfuse's documented SDK 5 minimum of 4.59. |
+| Langfuse self-hosted | 4.56.0 and 4.70.0 with Observations v2 / Scores v3, fictional trace and score | The REST read path and offline-import agreement were exercised against both servers without a model call. Other server versions implementing the same endpoints have not been live-tested here. [Langfuse versioning](https://langfuse.com/self-hosting/upgrade/versioning) documents endpoint availability. |
+| Langfuse Python SDK | 4.18.0 in optional local diagnostics | The core collector uses REST and has no SDK dependency. SDK 5 was not tested; testing the REST path on server 4.70.0 does not establish SDK 5 compatibility. |
 | Enriched blob export | Manifest v1, `EVENTS`, `observations_v2` and `scores`; JSONL, gzip JSONL, Parquet fictional fixtures | Offline conformance, resume, and resource tests passed. A production Langfuse blob-export run was not verified. See [bulk intake](BLOB.md). |
 
 The compatibility table states observations, not a promise about all future Langfuse versions. Each new server or SDK combination should run the same synthetic integration fixture and be added only after verification.
