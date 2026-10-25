@@ -62,6 +62,7 @@ class PullTests(unittest.TestCase):
     def test_rest_transport_uses_get_basic_auth_and_bounded_retry(self) -> None:
         class Response:
             status = 200
+            headers = {}
 
             def __enter__(self):
                 return self
@@ -93,6 +94,7 @@ class PullTests(unittest.TestCase):
         self.assertEqual(len(requests), 2)
         self.assertTrue(retry_body.closed)
         self.assertEqual(requests[0].get_method(), "GET")
+        self.assertEqual(requests[0].get_header("Accept-encoding"), "identity")
         self.assertIsInstance(opener.call_args.args[1], module.urllib.request.ProxyHandler)
         self.assertEqual(opener.call_args.args[1].proxies, {})
         self.assertIn("/api/public/v2/observations?", requests[0].full_url)
@@ -108,6 +110,30 @@ class PullTests(unittest.TestCase):
         params = urllib.parse.parse_qs(urllib.parse.urlsplit(requests[-1].full_url).query)
         self.assertEqual(params["toTimestamp"], ["2026-10-04T00:00:00Z"])
         self.assertNotIn("toStartTime", params)
+
+    def test_rest_transport_rejects_compressed_response_without_decoding(self) -> None:
+        class Response:
+            status = 200
+            headers = {"Content-Encoding": "br"}
+
+            def __init__(self):
+                self.closed = False
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.closed = True
+
+            def read(self, size=-1):
+                raise AssertionError("compressed body must not be read")
+
+        response = Response()
+        with patch.object(module.urllib.request, "build_opener") as opener:
+            opener.return_value.open.return_value = response
+            with self.assertRaisesRegex(SnapshotError, "unsupported content encoding"):
+                module._request_page(self.spec, "observations", None, self.credentials)
+        self.assertTrue(response.closed)
 
     def test_paginated_pull_matches_offline_source_rows(self) -> None:
         destination = self.root / "pull"

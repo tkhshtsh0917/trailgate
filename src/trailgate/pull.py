@@ -156,7 +156,10 @@ def _request_page(
         params["cursor"] = cursor
     url = spec.base_url.rstrip("/") + ENDPOINTS[table] + "?" + urllib.parse.urlencode(params)
     auth = base64.b64encode(f"{credentials[0]}:{credentials[1]}".encode()).decode()
-    request = urllib.request.Request(url, headers={"Authorization": f"Basic {auth}"})
+    request = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Basic {auth}", "Accept-Encoding": "identity"},
+    )
     opener = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
 
     for attempt in range(4):
@@ -164,6 +167,9 @@ def _request_page(
             with opener.open(request, timeout=spec.timeout_seconds) as response:
                 if response.status != 200:
                     raise SnapshotError(f"Langfuse {table} returned HTTP {response.status}")
+                encoding = response.headers.get("Content-Encoding", "identity")
+                if encoding.lower().strip() != "identity":
+                    raise SnapshotError(f"Langfuse {table} returned unsupported content encoding")
                 data = response.read(MAX_API_PAGE_BYTES + 1)
                 if len(data) > MAX_API_PAGE_BYTES:
                     raise SnapshotError(f"Langfuse {table} page exceeds 32 MiB")
