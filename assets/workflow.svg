@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 600" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 600" role="img" aria-labelledby="title description" lang="en">
   <title id="title">Langfuse and Trailgate trajectory workflow</title>
   <desc id="description">An agent application sends telemetry to Langfuse and records exact model-boundary content in a private sidecar. Trailgate imports bounded Langfuse data, preserves source evidence, audits it against human declarations, then writes private diagnostic episodes and gated Chat SFT rows.</desc>
   <defs>
@@ -91,5 +91,5 @@
   <path class="gateflow" d="M 940 437 H 980"/>
   <path class="flow" d="M 1112 265 V 329 H 805 V 360"/>
 
-  <text class="note" x="40" y="558">Scores stay later evidence. Blob intake without model-boundary capture remains diagnostic; the core makes no model call.</text>
+  <text class="note" x="40" y="558">Scores are evaluation evidence, not prior model input. Blob intake without boundary capture stays diagnostic; the core makes no model call.</text>
 </svg>

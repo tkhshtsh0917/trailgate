@@ -6,7 +6,7 @@ Trailgate はローカルで動く Python の CLI・ライブラリです。保�
 
 [English README](README.md) · [一通りの手順](docs/ja/GUIDE.md) · [v1 の契約と移行](docs/ja/CONTRACT.md) · [ロードマップ](docs/ja/ROADMAP.md) · [公開手順](docs/ja/RELEASING.md)
 
-![エージェントアプリ、Langfuse、Trailgate の軌跡データの流れ](assets/workflow.svg)
+![エージェントアプリ、Langfuse、Trailgate の軌跡データの流れ](assets/workflow.ja.svg)
 
 Langfuse から観測記録と後から付く score を取得し、アプリ側ではモデルに実際に渡したメッセージと tool 結果を別に記録します。Trailgate は両方を非公開の出典として保存してから監査・出力します。保存形式と学習用 view の違いは[形式の選択](docs/ja/FORMATS.md)を参照してください。
 

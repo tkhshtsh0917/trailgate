@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 600" role="img" aria-labelledby="title description" lang="ja">
+  <title id="title">LangfuseとTrailgateによる軌跡データ処理の流れ</title>
+  <desc id="description">エージェントアプリは実行記録をLangfuseへ送り、モデルに渡した内容を非公開の補助記録に保存します。Trailgateは範囲を限定してLangfuseデータを取り込み、出典を保持し、人間の申告と照らして監査します。その後、非公開の診断用episodeと、適格性を確認したChat SFTデータを出力します。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#67d7e9"/>
+    </marker>
+    <marker id="side-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffbb73"/>
+    </marker>
+    <marker id="gate-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a8e6a1"/>
+    </marker>
+    <style>
+      text { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP", -apple-system, BlinkMacSystemFont, sans-serif; }
+      .heading { fill: #f5f8ff; font-size: 29px; font-weight: 700; }
+      .subtitle { fill: #aebdd2; font-size: 17px; }
+      .label { fill: #f5f8ff; font-size: 21px; font-weight: 700; }
+      .detail { fill: #d3def0; font-size: 16px; }
+      .note { fill: #aebdd2; font-size: 15px; }
+      .card { fill: #17253b; stroke: #3a526f; stroke-width: 2; }
+      .accent { fill: #67d7e9; }
+      .side { fill: #ffbb73; }
+      .gate { fill: #a8e6a1; }
+      .flow { fill: none; stroke: #67d7e9; stroke-width: 3; marker-end: url(#arrow); }
+      .sideflow { fill: none; stroke: #ffbb73; stroke-width: 3; stroke-dasharray: 8 6; marker-end: url(#side-arrow); }
+      .gateflow { fill: none; stroke: #a8e6a1; stroke-width: 3; marker-end: url(#gate-arrow); }
+    </style>
+  </defs>
+
+  <rect width="1280" height="600" rx="22" fill="#0c1628"/>
+  <text class="heading" x="40" y="55">Langfuseの記録から、審査済みの軌跡データへ</text>
+  <text class="subtitle" x="40" y="83">Trailgateは出典を保持し、学習用に出せるデータを判定します。</text>
+
+  <rect class="card" x="40" y="125" width="270" height="140" rx="14"/>
+  <rect class="accent" x="40" y="125" width="270" height="7" rx="3"/>
+  <text class="label" x="60" y="170">エージェントアプリ</text>
+  <text class="detail" x="60" y="201">モデル呼び出しとツール利用</text>
+  <text class="detail" x="60" y="226">生成にcapture IDを付与</text>
+
+  <rect class="card" x="355" y="125" width="270" height="140" rx="14"/>
+  <rect class="accent" x="355" y="125" width="270" height="7" rx="3"/>
+  <text class="label" x="375" y="170">Langfuse</text>
+  <text class="detail" x="375" y="201">traceとobservation</text>
+  <text class="detail" x="375" y="226">scoreは後からも到着</text>
+
+  <rect class="card" x="670" y="125" width="270" height="140" rx="14"/>
+  <rect class="accent" x="670" y="125" width="270" height="7" rx="3"/>
+  <text class="label" x="690" y="170">収集経路</text>
+  <text class="detail" x="690" y="201">範囲指定REST／保存ページ</text>
+  <text class="detail" x="690" y="226">またはenriched blob複製</text>
+
+  <rect class="card" x="985" y="125" width="255" height="140" rx="14"/>
+  <rect class="accent" x="985" y="125" width="255" height="7" rx="3"/>
+  <text class="label" x="1005" y="170">非公開アーカイブ</text>
+  <text class="detail" x="1005" y="201">元のbytesとhashを保存</text>
+  <text class="detail" x="1005" y="226">不明な関係は不明のまま</text>
+
+  <path class="flow" d="M 310 195 H 350"/>
+  <path class="flow" d="M 625 195 H 665"/>
+  <path class="flow" d="M 940 195 H 980"/>
+
+  <rect class="card" x="40" y="365" width="270" height="145" rx="14"/>
+  <rect class="side" x="40" y="365" width="270" height="7" rx="3"/>
+  <text class="label" x="60" y="409">capture補助記録</text>
+  <text class="detail" x="60" y="440">モデル入力とツール定義</text>
+  <text class="detail" x="60" y="465">モデルに渡したツール結果</text>
+  <path class="sideflow" d="M 175 265 V 360"/>
+  <path class="sideflow" d="M 310 397 H 334 V 316 H 805 V 270"/>
+  <text class="note" x="385" y="306">保存済みAPI snapshotにはcapture.jsonlを任意で同梱</text>
+
+  <rect class="card" x="355" y="365" width="270" height="145" rx="14"/>
+  <rect class="gate" x="355" y="365" width="270" height="7" rx="3"/>
+  <text class="label" x="375" y="409">人間による申告</text>
+  <text class="detail" x="375" y="440">権利・プライバシー・品質</text>
+  <text class="detail" x="375" y="465">タスク単位の分割根拠</text>
+
+  <rect class="card" x="670" y="365" width="270" height="145" rx="14"/>
+  <rect class="gate" x="670" y="365" width="270" height="7" rx="3"/>
+  <text class="label" x="690" y="409">監査と適格性判定</text>
+  <text class="detail" x="690" y="440">報告／関係図／適格性評価</text>
+  <text class="detail" x="690" y="465">対応する判断を選定</text>
+
+  <rect class="card" x="985" y="365" width="255" height="145" rx="14"/>
+  <rect class="gate" x="985" y="365" width="255" height="7" rx="3"/>
+  <text class="label" x="1005" y="409">非公開の出力</text>
+  <text class="detail" x="1005" y="440">適格Chat SFT＋manifest</text>
+  <text class="detail" x="1005" y="465">診断用episode</text>
+
+  <path class="gateflow" d="M 625 437 H 665"/>
+  <path class="gateflow" d="M 940 437 H 980"/>
+  <path class="flow" d="M 1112 265 V 329 H 805 V 360"/>
+
+  <text class="note" x="40" y="558">scoreは評価根拠で、過去のモデル入力には含めません。モデル境界captureのないblob取り込みは診断用。本体はモデルを呼び出しません。</text>
+</svg>
