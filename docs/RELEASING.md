@@ -1,5 +1,7 @@
 # Release checklist
 
+[日本語](ja/RELEASING.md)
+
 A commit, push, tag, GitHub release, and package-index publication are distinct actions. Review the candidate and complete the checks below before creating a tag. Package publication is optional and separate.
 
 Use uv 0.12.10 for release builds, matching CI and the checked wheel generator metadata.

@@ -1,5 +1,7 @@
 # Local enriched blob intake
 
+[日本語](ja/BLOB.md)
+
 Mirror a complete Langfuse blob-export run under one local object root, keeping each object's **full key** as its relative path. Point `--manifest` to that run's manifest:
 
 ```sh

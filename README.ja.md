@@ -4,11 +4,11 @@
 
 Trailgate はローカルで動く Python の CLI・ライブラリです。保存済み Observations v2 / Scores v3 応答ページの取り込み、範囲を限定した読み取り専用 API pull、enriched blob export の取り込みに対応します。元データの bytes と hash を保持し、観測できた decision と tool の関係を復元します。構造上の忠実性、品質選択、利用権、プライバシー、データ分割を別々に扱います。本体はモデル API を呼ばず、データセットを送信しません。
 
-[English README](README.md) · [一通りの手順](docs/GUIDE.md) · [v1 の契約と移行](docs/CONTRACT.md) · [ロードマップ](docs/ROADMAP.md) · [公開手順](docs/RELEASING.md)
+[English README](README.md) · [一通りの手順](docs/ja/GUIDE.md) · [v1 の契約と移行](docs/ja/CONTRACT.md) · [ロードマップ](docs/ja/ROADMAP.md) · [公開手順](docs/ja/RELEASING.md)
 
-![エージェントアプリ、Langfuse、Trailgate の軌跡データの流れ](docs/workflow.svg)
+![エージェントアプリ、Langfuse、Trailgate の軌跡データの流れ](assets/workflow.svg)
 
-Langfuse から観測記録と後から付く score を取得し、アプリ側ではモデルに実際に渡したメッセージと tool 結果を別に記録します。Trailgate は両方を非公開の出典として保存してから監査・出力します。保存形式と学習用 view の違いは[形式の選択](docs/FORMATS.md)を参照してください。
+Langfuse から観測記録と後から付く score を取得し、アプリ側ではモデルに実際に渡したメッセージと tool 結果を別に記録します。Trailgate は両方を非公開の出典として保存してから監査・出力します。保存形式と学習用 view の違いは[形式の選択](docs/ja/FORMATS.md)を参照してください。
 
 ## 架空データで試す
 
@@ -32,18 +32,18 @@ uv run --locked trailgate export dataset private-example \
 
 架空の fixture には Chat SFT 対象の decision が 2 件あります。付属の権利申告とポリシーは、**この架空 snapshot ID にだけ**適用されます。`private-*` は Git から除外し、POSIX 環境では出力ディレクトリを `0700`、ファイルを `0600` で作成します。既存の出力は上書きしません。
 
-従来の `trailgate export sft` は互換性のため残した**候補診断用**です。品質・プライバシー・split は確認しません。`evaluate dataset` はモデル内容を書き出さずに適格性と除外理由を表示します。学習用の出力には `export dataset` を使用してください。詳細は[データセット適格性](docs/DATASET.md)を参照してください。
+従来の `trailgate export sft` は互換性のため残した**候補診断用**です。品質・プライバシー・split は確認しません。`evaluate dataset` はモデル内容を書き出さずに適格性と除外理由を表示します。学習用の出力には `export dataset` を使用してください。詳細は[データセット適格性](docs/ja/DATASET.md)を参照してください。
 
 ## 入力と出力
 
 | 入力 | コマンド | 詳細 |
 |---|---|---|
 | 保存済み Observations v2 / Scores v3 応答ページ | `doctor`、`ingest langfuse-api-snapshot` | [API snapshot 形式](README.md#saved-api-snapshot) |
-| 稼働中の Langfuse API | `pull langfuse` | [範囲指定と再開](docs/PULL.md) |
-| ローカルに複製した enriched blob export | `ingest-blob` | [manifest に基づく逐次取り込み](docs/BLOB.md) |
-| アプリのモデル呼び出し境界 | `CaptureWriter` | [capture と復旧](docs/CAPTURE.md) |
+| 稼働中の Langfuse API | `pull langfuse` | [範囲指定と再開](docs/ja/PULL.md) |
+| ローカルに複製した enriched blob export | `ingest-blob` | [manifest に基づく逐次取り込み](docs/ja/BLOB.md) |
+| アプリのモデル呼び出し境界 | `CaptureWriter` | [capture と復旧](docs/ja/CAPTURE.md) |
 
-`report` は件数と最大 100 件の decision 診断を既定で表示し、プロンプトや tool 結果の中身は表示しません。`export graph` は、内容を含む非公開の[episode graph](docs/EPISODE_GRAPH.md)を出力します。episode の開始・終了が不明な場合は `unknown` と記録します。`export dataset` は一般形式の episode、条件を満たした Chat SFT 行、出典・選択理由を持つ manifest を非公開ファイルとして出力します。score は後から付く根拠として別に扱い、過去のモデル入力へ混ぜません。
+`report` は件数と最大 100 件の decision 診断を既定で表示し、プロンプトや tool 結果の中身は表示しません。`export graph` は、内容を含む非公開の[episode graph](docs/ja/EPISODE_GRAPH.md)を出力します。episode の開始・終了が不明な場合は `unknown` と記録します。`export dataset` は一般形式の episode、条件を満たした Chat SFT 行、出典・選択理由を持つ manifest を非公開ファイルとして出力します。score は後から付く根拠として別に扱い、過去のモデル入力へ混ぜません。
 
 保存済み API snapshot は 64 MiB までです。メモリ上の graph・audit・dataset view は observation 20,000 件、正規化行と capture の合計 32 MiB が上限です。大きな blob archive の `report` と `inspect` は逐次処理し、`inspect` は表示上限による省略件数を明示します。
 
@@ -51,7 +51,7 @@ uv run --locked trailgate export dataset private-example \
 
 `faithful_candidates` は capture の**構造上の整合性**だけを表し、正答率や利用権の認定ではありません。Chat SFT はテキストと function call の範囲に対応します。provider-native の Responses 記録は元の形で archive と一般形式 episode に残し、Chat へ暗黙に変換しません。
 
-学習用データセットには、generation ID ごとの手動品質選択、task input・model output・tool result それぞれの利用許可、機微情報なしという明示的なプライバシー確認、task 単位の split 記録、trace 内で一貫した session ID が必要です。これらは利用者の自己申告であり、Trailgate が品質・法的権利・プライバシーを独立に保証するものではありません。自動墨消し、完全な episode 境界、複数ログソースの取り込み、token 単位の loss mask、RL rollout 出力、モデル学習は v1.0.0 の範囲外です。公開ファイル形式の [JSON Schema](docs/CONTRACT.md#published-json-schemas) と [脅威・失敗境界](docs/SECURITY.md) も参照してください。
+学習用データセットには、generation ID ごとの手動品質選択、task input・model output・tool result それぞれの利用許可、機微情報なしという明示的なプライバシー確認、task 単位の split 記録、trace 内で一貫した session ID が必要です。これらは利用者の自己申告であり、Trailgate が品質・法的権利・プライバシーを独立に保証するものではありません。自動墨消し、完全な episode 境界、複数ログソースの取り込み、token 単位の loss mask、RL rollout 出力、モデル学習は v1.0.0 の範囲外です。公開ファイル形式の [JSON Schema](docs/ja/CONTRACT.md#公開-json-schema)、[脅威・失敗境界](docs/ja/SECURITY.md)、[比較](docs/ja/COMPARISON.md)も参照してください。
 
 [任意の live 診断](examples/live/README.md)は、明示して実行した場合だけ self-hosted Langfuse、モデル API、または MuSiQue の公式 train データを使います。本体とテストは架空データで動き、モデル API を呼びません。
 

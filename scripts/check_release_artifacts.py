@@ -203,7 +203,8 @@ def check_artifacts(wheel: Path, sdist: Path) -> None:
     prefix = f"trailgate-{version}/"
     public_files = [ROOT / name for name in ("README.md", "README.ja.md", "LICENSE")]
     public_files.extend((ROOT / "docs").glob("*.md"))
-    public_files.extend((ROOT / "docs").glob("*.svg"))
+    public_files.extend((ROOT / "docs" / "ja").glob("*.md"))
+    public_files.extend((ROOT / "assets").glob("*.svg"))
     sdist_files = {prefix + "src/" + name for name in expected}
     sdist_files.update(prefix + str(path.relative_to(ROOT)) for path in public_files)
     sdist_files.update(

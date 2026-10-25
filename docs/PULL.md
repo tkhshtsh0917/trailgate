@@ -1,5 +1,7 @@
 # Read-only Langfuse pull
 
+[日本語](ja/PULL.md)
+
 Use a bounded time interval and the project ID associated with your Langfuse API keys. `--dry-run` validates and prints scope without reading keys or contacting the server:
 
 ```sh

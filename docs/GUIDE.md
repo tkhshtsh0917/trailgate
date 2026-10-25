@@ -1,5 +1,7 @@
 # End-to-end fictional workflow
 
+[日本語](ja/GUIDE.md)
+
 This walkthrough uses only bundled fictional records. It makes no network request or model call. Start from a fresh checkout with Python 3.12.13 and `uv`:
 
 ```sh

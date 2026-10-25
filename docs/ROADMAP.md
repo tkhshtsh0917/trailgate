@@ -1,5 +1,7 @@
 # Trailgate release milestones
 
+[日本語](ja/ROADMAP.md)
+
 Updated: 2026-10-25. This is a release record for **Trailgate the library and CLI**. It does not depend on training a retrieval model or publishing any real trajectory data. A local commit, GitHub push, version tag, and package release are separate actions. `v1.0.0` is tagged; no package-index release has been made.
 
 ## Product contract for v1.0.0

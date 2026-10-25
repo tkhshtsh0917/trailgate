@@ -1,5 +1,7 @@
 # v1 contracts and migration
 
+[日本語](ja/CONTRACT.md)
+
 Trailgate 1.0.0 freezes the **documented** CLI and Python entry points, not internal functions prefixed with `_`. A major version may remove or change a documented contract. A minor version may add commands, fields, and schemas without changing the meaning of existing fields. Patch versions fix defects. Consumers should ignore unknown object fields and reject an unknown `schema_version`; they should not assume episode boundaries or model context absent from the capture.
 
 ## Supported interfaces

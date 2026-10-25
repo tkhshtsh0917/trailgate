@@ -1,5 +1,7 @@
 # Model-boundary capture
 
+[日本語](ja/CAPTURE.md)
+
 `CaptureWriter` writes a private JSONL sidecar. Call `begin_decision` immediately before model inference with the exact messages and available tool schemas. An explicit `tools=[]` means no tools were available; an absent schema remains unknown. Attach the returned capture ID to the Langfuse generation metadata as `trailgate_capture_id`.
 
 For gated Chat SFT, instrument Langfuse so every observation in the collected project snapshot records one consistent, nonempty session ID per trace. If any trace lacks this evidence, Trailgate blocks Chat SFT for the project snapshot because it cannot determine whether that trace belongs to a selected session. Collect a smaller, fully instrumented snapshot if needed.

@@ -1,5 +1,7 @@
 # Episode graph
 
+[日本語](ja/EPISODE_GRAPH.md)
+
 `trailgate export graph ARCHIVE --out private-graph.json` writes a private `trailgate.episode_graph.v1` graph. The graph keeps source IDs and references for episodes, traces, generation decisions, tool actions, delivered values, observation parent links, and score subjects. It includes captured prompts and tool results; handle it as private data.
 
 An episode is a **group with an unknown boundary**. Observations with one consistent nonempty session ID are grouped by project and session, including across trace IDs. Otherwise they are grouped by project and trace. This grouping does not assert that a task began or ended there. `history_relation` and `context_compaction` remain `unknown`: Trailgate preserves each captured prefix exactly and never fills gaps from neighboring observations. Repeated text is not deduplicated.

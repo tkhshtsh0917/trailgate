@@ -1,5 +1,7 @@
 # Data protection and failure boundaries
 
+[日本語](ja/SECURITY.md)
+
 Trailgate handles prompts, tool results, and model outputs as potentially sensitive local data. Its core performs no model call or dataset upload. An explicit `pull` uses Langfuse GET endpoints. Saved source bytes and content-bearing exports remain local; the caller controls retention, sharing, and deletion.
 
 | Threat or failure | v1 behavior | Residual responsibility |

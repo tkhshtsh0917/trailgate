@@ -1,5 +1,7 @@
 # Trajectory formats and interoperability
 
+[日本語](ja/FORMATS.md)
+
 Trailgate v1.0.0 uses a versioned, provenance-rich **private archive** as its source of truth. The episode graph and dataset files are derived views. There is no single format that simultaneously standardizes agent telemetry, faithful trajectory interchange, SFT examples, and RL experience. Replacing the archive with a training format would lose the original Langfuse bytes and uncertainty about episode boundaries or model-visible context.
 
 | Format | Role | Fit for Trailgate v1 |

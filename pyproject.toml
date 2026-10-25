@@ -30,7 +30,7 @@ requires = ["uv_build>=0.12.10,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-source-include = ["README.ja.md", "docs/*.md", "docs/*.svg"]
+source-include = ["README.ja.md", "docs/*.md", "docs/ja/*.md", "assets/*.svg"]
 
 [tool.ruff]
 target-version = "py312"
