@@ -7,6 +7,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -65,6 +66,26 @@ class LiveModuleLayoutTests(unittest.TestCase):
 
         self.assertEqual(result[0]["data"][0]["id"], "expected")
         sleep.assert_called_once_with(0.1)
+
+    def test_score_reader_selects_sdk_v4_and_v5_accessors(self) -> None:
+        snapshot = _import_live("langfuse_snapshot")
+
+        def v4_reader(**_kwargs):
+            return "v4"
+
+        def v5_reader(**_kwargs):
+            return "v5"
+
+        v4 = SimpleNamespace(
+            api=SimpleNamespace(
+                scores_v3=SimpleNamespace(get_many_v3=v4_reader),
+                scores=SimpleNamespace(get_many=v5_reader),
+            )
+        )
+        v5 = SimpleNamespace(api=SimpleNamespace(scores=SimpleNamespace(get_many=v5_reader)))
+
+        self.assertIs(snapshot._score_reader(v4), v4_reader)
+        self.assertIs(snapshot._score_reader(v5), v5_reader)
 
 
 if __name__ == "__main__":

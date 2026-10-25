@@ -1,6 +1,6 @@
-# Roadmap to Trailgate v1.0.0
+# Trailgate release milestones
 
-Updated: 2026-10-25. This is a release roadmap for **Trailgate the library and CLI**. It does not depend on training a retrieval model or publishing any real trajectory data. Versions below describe capability milestones. A local commit, GitHub push, version tag, and package release are separate actions; the package version alone does not imply a published release.
+Updated: 2026-10-25. This is a release record for **Trailgate the library and CLI**. It does not depend on training a retrieval model or publishing any real trajectory data. A local commit, GitHub push, version tag, and package release are separate actions. `v1.0.0` is tagged; no package-index release has been made.
 
 ## Product contract for v1.0.0
 
@@ -19,15 +19,15 @@ The core package does not run models, fine-tune them, judge answer quality, or s
 | **v0.1.0 — honest public preview** | Provide the offline snapshot importer, capture helper, decision audit, and synthetic fixture. Document the exact CLI commands, supported input shape, known exclusions, and private-by-default behavior. Keep opt-in model examples separate. | A fresh checkout can install, test, run the fixture, and build an sdist/wheel. Candidate artifacts and the Git tree contain no `.env`, private archive, dataset text, or credential. README does not imply episode stitching or online pulling exists. |
 | **v0.2.0 — cumulative trajectory pipeline** | Add the episode graph, capture recovery, bounded read-only Langfuse pull, resumable enriched-blob intake, and gated dataset export together. Preserve raw evidence and separate structural fidelity, manual quality selection, rights, privacy, and split provenance. | Synthetic adversarial and pagination tests, a local self-hosted pull of fictional telemetry, deterministic dataset output, and a 100,000-observation import below 1 GiB pass. Unknown model context and episode boundaries remain explicit. |
 | **v1.0.0 source candidate** | Freeze the documented Python/CLI contracts, publish JSON Schemas and migration guidance, and verify the bounded conformance and release gates. | A new user can collect or import Langfuse data, inspect eligibility, and export permitted views without running a model. Build artifacts contain only intended public files. |
-| **v1.0.0 tag** | Create only after review of the source candidate and CI results. Package-index publication is a separate decision. | The tagged commit matches the reviewed candidate. |
+| **v1.0.0 tag** | Created after source review and successful CI. Package-index publication remains a separate decision. | The tag points to the reviewed commit `9643b97`. |
 
 Milestones are gates, not calendar dates. A preview may ship with explicit limitations; v1.0.0 waits for the reliability and contract gates. Features can move between pre-1.0 versions, but the exit gates for provenance, completeness, privacy, and reproducibility must remain.
 
-## Current state and next implementation slices
+## v1.0.0 verification
 
 The v0.2.0 milestone implemented the graph, capture recovery, read-only v2/v3 pull, resumable enriched-blob intake, and gated dataset exports. The v1 source candidate adds a cross-path conformance suite, bounded in-memory views and CLI output, an eligibility preview, public JSON Schemas, and [contracts, migration and compatibility](CONTRACT.md). Fictional fixtures cover adversarial capture states, checkpoint recovery, score revision, and split leakage. A local self-hosted Langfuse trace and score were pulled and compared with offline import without a model call. The 100,000-observation resource gate covers import and summary only. Large graph and dataset exports fail visibly at the documented limit; streaming diagnostics remain available.
 
-The source candidate has passed local unit suites on CPython 3.12.13, 3.13.15, and 3.14.7; Ruff, optional Parquet, the 100,000-observation resource gates, a 1,000,000-trace stress run, reproducible wheel/sdist builds, a clean wheel install, public-file checks, and a locked-dependency audit. Fictional REST pulls against local Langfuse 4.56.0 and 4.70.0 agreed with offline import without a model call. The remaining release gates are remote CI after pushing the reviewed commits and final human review. No new tag or package-index release is implied by a source commit.
+The reviewed `v1.0.0` tag points to commit `9643b97`; both the branch-push and tag-push CI runs passed. Its source candidate passed local unit suites on CPython 3.12.13, 3.13.15, and 3.14.7; Ruff, optional Parquet, the 100,000-observation resource gates, a 1,000,000-trace stress run, reproducible wheel/sdist builds, a clean wheel install, public-file checks, and a locked-dependency audit. Fictional REST pulls against local Langfuse 4.56.0 and 4.70.0 agreed with offline import without a model call. Later commits on `main` do not change the tagged release; no package-index release has been made.
 
 ## v1 release rules
 

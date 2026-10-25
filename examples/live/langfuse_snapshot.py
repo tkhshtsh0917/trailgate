@@ -70,6 +70,14 @@ def _collect_complete(
     raise RuntimeError(f"Langfuse has not returned every expected {kind}; capture remains private")
 
 
+def _score_reader(langfuse: Any) -> Any:
+    """Select the Scores v3 read accessor in Langfuse Python SDK v4 or v5."""
+    scores_v3 = getattr(langfuse.api, "scores_v3", None)
+    if scores_v3 is not None:
+        return scores_v3.get_many_v3
+    return langfuse.api.scores.get_many
+
+
 def _save_snapshot(
     langfuse: Any,
     trace_id: str,
@@ -92,7 +100,7 @@ def _save_snapshot(
         retry_delay=1,
     )
     scores = _collect_complete(
-        langfuse.api.scores_v3.get_many_v3,
+        _score_reader(langfuse),
         trace_id=trace_id,
         fields="details,subject",
         start=start,
