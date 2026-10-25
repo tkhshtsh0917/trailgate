@@ -12,6 +12,8 @@ Trailgate 1.0.0 freezes the **documented** CLI and Python entry points, not inte
 
 `read_archive` and graph/audit/dataset materialization are bounded in-memory views. `iter_archive_rows`, bulk `report`, and `inspect` support larger verified archives. The bounds and exclusions are part of the v1 contract; the implementation may raise them in a minor release. Output paths must be new. `export graph`, candidate SFT, and dataset files can contain private content.
 
+Normal CLI diagnostics report unknown field counts without printing arbitrary field names from source data. The private archive retains the original names for provenance.
+
 ## Published JSON Schemas
 
 The nine Draft 2020-12 JSON Schemas are shipped inside the wheel and sdist. Consumers can use `from trailgate.schemas import SCHEMA_FILES, load_schema`, then `load_schema("dataset-manifest-v1.json")`. They are also readable under `src/trailgate/schemas/` in a checkout. No runtime JSON Schema dependency is needed; schema validation in the project tests uses a development dependency.

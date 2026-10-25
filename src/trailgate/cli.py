@@ -15,6 +15,7 @@ from .bulk_report import public_bulk_summary
 from .capture_recovery import recover_capture
 from .dataset_assessment import evaluate_dataset
 from .dataset_export import export_dataset
+from .diagnostics import summarize_unknown_fields
 from .pull import PullSpec, preview_pull, pull_snapshot
 from .snapshot import SnapshotError, ingest_snapshot, read_snapshot
 from .snapshot_input import _read_json
@@ -220,7 +221,11 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = _run_command(args, parser)
-        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                summarize_unknown_fields(result), ensure_ascii=False, indent=2, sort_keys=True
+            )
+        )
         return 0
     except (SnapshotError, OSError, ValueError, PermissionError) as exc:
         print(f"trailgate: {exc}", file=sys.stderr)

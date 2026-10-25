@@ -11,7 +11,7 @@ Trailgate handles prompts, tool results, and model outputs as potentially sensit
 | Resource exhaustion | API pages, snapshots, capture events, JSONL rows, in-memory views, and CLI output have documented limits. Large archives retain streaming report/inspect access. | Large graph or dataset exports require smaller source windows. Disk usage of retained raw data remains the operator's responsibility. |
 | Malicious content inside a trace | Trace text is treated as data, not instructions. Core transforms do not execute tool calls, deserialize Python objects, or invoke an LLM. | An application that later feeds exported text to a model needs its own prompt-injection controls. |
 
-JSON Schema validation is a structural check and does not replace Trailgate's semantic validation or a human review. `episodes.jsonl`, graph exports, and candidate SFT rows are private diagnostics even when they contain plausible model turns. When evidence is absent, retain the original archive and investigate; do not mark a row eligible by editing the manifest.
+Normal CLI reports show counts instead of unknown source field names, and duplicate JSON key errors omit the key text. Source IDs, local paths, and output paths can still appear in diagnostics; keep those identifiers free of sensitive text. JSON Schema validation is a structural check and does not replace Trailgate's semantic validation or a human review. `episodes.jsonl`, graph exports, and candidate SFT rows are private diagnostics even when they contain plausible model turns. When evidence is absent, retain the original archive and investigate; do not mark a row eligible by editing the manifest.
 
 ## Dependency and compressed-response controls
 

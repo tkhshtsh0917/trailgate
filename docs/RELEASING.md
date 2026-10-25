@@ -2,6 +2,8 @@
 
 A commit, push, tag, GitHub release, and package-index publication are distinct actions. Review the candidate and complete the checks below before creating a tag. Package publication is optional and separate.
 
+Use uv 0.12.10 for release builds, matching CI and the checked wheel generator metadata.
+
 ## Candidate checks
 
 1. In a clean checkout run `uv sync --locked`, then the [fictional end-to-end guide](GUIDE.md). No model key or Langfuse server is required.
@@ -12,7 +14,7 @@ A commit, push, tag, GitHub release, and package-index publication are distinct 
 6. Inspect `git status --short --untracked-files=all` and `git diff --cached --name-only`. Never stage an environment file, credential, private capture/archive/dataset, real corpus, or machine-specific path. Confirm repository-local Git identity and reread documentation for claims that exceed verified behavior.
 7. Check [v1 contracts and migration](CONTRACT.md), [threat model](SECURITY.md), and [comparison scope](COMPARISON.md). CI should pass across declared Python versions. A live Langfuse or Parquet combination not exercised in the matrix must be labeled untested.
 
-The public-file scanner is a heuristic. It rejects sensitive names before reading their contents and reports only rule names and line numbers for text findings; it cannot establish that all private material was found.
+The release artifact checker validates the exact member set, the CLI entry point, project metadata, the wheel RECORD, and the active source-distribution build configuration. The public-file scanner is a heuristic. It rejects sensitive names before reading their contents and reports only rule names and line numbers for text findings; it cannot establish that all private material was found.
 
 ## After review
 

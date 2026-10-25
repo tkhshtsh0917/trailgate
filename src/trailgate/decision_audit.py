@@ -8,6 +8,7 @@ from typing import Any
 
 from .archive import read_archive
 from .chat_shape import valid_message, valid_tool_call, valid_tool_schema
+from .diagnostics import summarize_unknown_fields
 from .observation_time import validate_observation_times
 from .snapshot_input import SNAPSHOT_SCHEMA, SnapshotError, _jsonl
 
@@ -320,4 +321,4 @@ def public_report(path: str | Path) -> dict[str, Any]:
         {key: value for key, value in item.items() if not key.startswith("_")}
         for item in report["decisions"]
     ]
-    return report
+    return summarize_unknown_fields(report)

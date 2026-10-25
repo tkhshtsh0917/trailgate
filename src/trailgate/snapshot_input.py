@@ -73,7 +73,7 @@ def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise SnapshotError(f"duplicate JSON key: {key}")
+            raise SnapshotError("duplicate JSON key")
         result[key] = value
     return result
 

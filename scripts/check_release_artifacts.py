@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
+import hashlib
+import io
 import stat
 import tarfile
 import tomllib
 import zipfile
+from collections import Counter
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 
@@ -14,6 +19,9 @@ from trailgate import __version__
 from trailgate.schemas import SCHEMA_FILES
 
 ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_WHEEL = (
+    b"Wheel-Version: 1.0\nGenerator: uv 0.12.10\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+)
 
 
 def _source_files() -> dict[str, bytes]:
@@ -57,6 +65,84 @@ def _wheel_member_kind(member: zipfile.ZipInfo) -> str:
     return "file" if mode in {0, stat.S_IFREG} else "other"
 
 
+def _expected_metadata_headers(project: dict) -> Counter[tuple[str, str]]:
+    if project.get("readme") != "README.md" or len(project.get("authors", [])) != 1:
+        raise ValueError("release metadata verifier needs one author and README.md")
+
+    author = project["authors"][0]
+    headers = [
+        ("metadata-version", "2.4"),
+        ("name", project["name"]),
+        ("version", project["version"]),
+        ("summary", project["description"]),
+        ("keywords", ",".join(project["keywords"])),
+        ("author", author["name"]),
+        ("author-email", f"{author['name']} <{author['email']}>"),
+        ("license-expression", project["license"]),
+        (
+            "requires-python",
+            ", ".join(part.strip() for part in project["requires-python"].split(",")),
+        ),
+        ("description-content-type", "text/markdown"),
+    ]
+    headers.extend(("license-file", name) for name in project["license-files"])
+    headers.extend(("requires-dist", name) for name in project.get("dependencies", []))
+    for extra, dependencies in project.get("optional-dependencies", {}).items():
+        headers.append(("provides-extra", extra))
+        headers.extend(("requires-dist", f"{name} ; extra == '{extra}'") for name in dependencies)
+    headers.extend(("project-url", f"{name}, {url}") for name, url in project["urls"].items())
+    return Counter(headers)
+
+
+def _check_metadata(data: bytes, project: dict) -> None:
+    """Bind every wheel metadata field and its description to reviewed project files."""
+    _, separator, description = data.partition(b"\n\n")
+    if not separator or description != (ROOT / "README.md").read_bytes():
+        raise ValueError("wheel metadata description differs from README.md")
+
+    metadata = BytesParser().parsebytes(data)
+    headers = Counter((name.lower(), value) for name, value in metadata.items())
+    if headers != _expected_metadata_headers(project):
+        raise ValueError("wheel metadata differs from pyproject.toml")
+
+
+def _check_entry_points(data: bytes, project: dict) -> None:
+    scripts = project.get("scripts", {})
+    expected = "\n".join(
+        ["[console_scripts]", *(f"{name} = {target}" for name, target in scripts.items()), "", ""]
+    ).encode()
+    if data != expected:
+        raise ValueError("wheel entry points differ from pyproject.toml")
+
+
+def _check_record(package: zipfile.ZipFile, record_name: str, files: set[str]) -> None:
+    try:
+        rows = list(csv.reader(io.StringIO(package.read(record_name).decode("utf-8"))))
+    except (csv.Error, UnicodeError) as exc:
+        raise ValueError("invalid wheel RECORD") from exc
+    if len(rows) != len(files) or any(len(row) != 3 for row in rows):
+        raise ValueError("wheel RECORD member list differs from package")
+
+    recorded = {row[0] for row in rows}
+    if recorded != files or len(recorded) != len(rows):
+        raise ValueError("wheel RECORD member list differs from package")
+    for name, digest, size in rows:
+        if name == record_name:
+            if digest or size:
+                raise ValueError("wheel RECORD self-entry is invalid")
+            continue
+        content = package.read(name)
+        encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest()).rstrip(b"=").decode()
+        if digest != "sha256=" + encoded or size != str(len(content)):
+            raise ValueError("wheel RECORD digest or size differs from package")
+
+
+def _check_sdist_pyproject(data: bytes, source: bytes) -> None:
+    """Allow formatting changes from uv while rejecting changed settings and comments."""
+    if b"#" in data or tomllib.loads(data.decode("utf-8")) != tomllib.loads(source.decode("utf-8")):
+        raise ValueError("sdist active pyproject differs from reviewed source")
+
+
 def check_artifacts(wheel: Path, sdist: Path) -> None:
     """Require expected members, metadata, and byte-identical bundled source files."""
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
@@ -84,16 +170,14 @@ def check_artifacts(wheel: Path, sdist: Path) -> None:
                 raise ValueError(f"wheel source bytes differ: {name}")
 
         metadata_name = f"{dist_info}/METADATA"
-        metadata = BytesParser().parsebytes(package.read(metadata_name))
-        python_requirement = metadata["Requires-Python"].replace(" ", "")
-        if metadata["Version"] != version or python_requirement != project[
-            "requires-python"
-        ].replace(" ", ""):
-            raise ValueError("wheel metadata differs from pyproject.toml")
-        if metadata.get_all("Requires-Dist") and any(
-            "jsonschema" in item for item in metadata.get_all("Requires-Dist")
-        ):
-            raise ValueError("development-only schema validator leaked into runtime dependencies")
+        metadata_bytes = package.read(metadata_name)
+        _check_metadata(metadata_bytes, project)
+        _check_entry_points(package.read(f"{dist_info}/entry_points.txt"), project)
+        if package.read(f"{dist_info}/WHEEL") != EXPECTED_WHEEL:
+            raise ValueError("wheel build metadata differs from reviewed toolchain")
+        if package.read(f"{dist_info}/licenses/LICENSE") != (ROOT / "LICENSE").read_bytes():
+            raise ValueError("wheel license differs from reviewed source")
+        _check_record(package, f"{dist_info}/RECORD", wheel_files)
 
     prefix = f"trailgate-{version}/"
     public_files = [ROOT / name for name in ("README.md", "README.ja.md", "LICENSE")]
@@ -132,11 +216,14 @@ def check_artifacts(wheel: Path, sdist: Path) -> None:
             stream = package.extractfile(member)
             if stream is None or stream.read() != source_path.read_bytes():
                 raise ValueError(f"sdist public documentation differs: {name}")
-        if (
-            package.extractfile(files[prefix + "pyproject.toml.orig"]).read()
-            != (ROOT / "pyproject.toml").read_bytes()
-        ):
+        source_pyproject = (ROOT / "pyproject.toml").read_bytes()
+        if package.extractfile(files[prefix + "pyproject.toml.orig"]).read() != source_pyproject:
             raise ValueError("sdist original pyproject differs from reviewed source")
+        _check_sdist_pyproject(
+            package.extractfile(files[prefix + "pyproject.toml"]).read(), source_pyproject
+        )
+        if package.extractfile(files[prefix + "PKG-INFO"]).read() != metadata_bytes:
+            raise ValueError("sdist PKG-INFO differs from reviewed wheel metadata")
 
 
 def main() -> int:
@@ -153,7 +240,7 @@ def main() -> int:
         check_artifacts(wheel, sdist)
     except (OSError, ValueError, KeyError, tarfile.TarError, zipfile.BadZipFile) as exc:
         parser.exit(2, f"release artifact check failed: {exc}\n")
-    print("Release artifact check passed: source and schemas match both packages")
+    print("Release artifact check passed: members, source, metadata, and RECORD match")
     return 0
 
 
