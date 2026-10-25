@@ -65,6 +65,26 @@ def _wheel_member_kind(member: zipfile.ZipInfo) -> str:
     return "file" if mode in {0, stat.S_IFREG} else "other"
 
 
+def _check_wheel_container(package: zipfile.ZipFile) -> None:
+    """Reject untracked ZIP comment and extra fields outside wheel RECORD."""
+    if package.comment or any(item.comment or item.extra for item in package.infolist()):
+        raise ValueError("wheel has unreviewed ZIP metadata")
+
+
+def _check_sdist_container(
+    path: Path, members: list[tarfile.TarInfo], global_pax: dict[str, str]
+) -> None:
+    """Reject gzip and tar metadata that can carry unreviewed text."""
+    with path.open("rb") as stream:
+        header = stream.read(10)
+    if len(header) != 10 or header[:3] != b"\x1f\x8b\x08" or header[3] != 0:
+        raise ValueError("sdist has unreviewed gzip metadata")
+    if global_pax or any(
+        item.pax_headers or item.uname or item.gname or item.linkname for item in members
+    ):
+        raise ValueError("sdist has unreviewed tar metadata")
+
+
 def _expected_metadata_headers(project: dict) -> Counter[tuple[str, str]]:
     if project.get("readme") != "README.md" or len(project.get("authors", [])) != 1:
         raise ValueError("release metadata verifier needs one author and README.md")
@@ -160,6 +180,7 @@ def check_artifacts(wheel: Path, sdist: Path) -> None:
         for name in ("METADATA", "WHEEL", "entry_points.txt", "RECORD", "licenses/LICENSE")
     }
     with zipfile.ZipFile(wheel) as package:
+        _check_wheel_container(package)
         _check_members(
             [(item.filename, _wheel_member_kind(item)) for item in package.infolist()],
             wheel_files,
@@ -182,6 +203,7 @@ def check_artifacts(wheel: Path, sdist: Path) -> None:
     prefix = f"trailgate-{version}/"
     public_files = [ROOT / name for name in ("README.md", "README.ja.md", "LICENSE")]
     public_files.extend((ROOT / "docs").glob("*.md"))
+    public_files.extend((ROOT / "docs").glob("*.svg"))
     sdist_files = {prefix + "src/" + name for name in expected}
     sdist_files.update(prefix + str(path.relative_to(ROOT)) for path in public_files)
     sdist_files.update(
@@ -189,6 +211,7 @@ def check_artifacts(wheel: Path, sdist: Path) -> None:
     )
     with tarfile.open(sdist) as package:
         members = package.getmembers()
+        _check_sdist_container(sdist, members, package.pax_headers)
         _check_members(
             [
                 (

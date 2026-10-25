@@ -5,9 +5,12 @@ import csv
 import hashlib
 import io
 import stat
+import tarfile
 import tomllib
 import unittest
 import zipfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from scripts.check_release_artifacts import (
     ROOT,
@@ -15,7 +18,9 @@ from scripts.check_release_artifacts import (
     _check_members,
     _check_metadata,
     _check_record,
+    _check_sdist_container,
     _check_sdist_pyproject,
+    _check_wheel_container,
     _expected_metadata_headers,
     _wheel_member_kind,
 )
@@ -62,6 +67,48 @@ class ReleaseArtifactTests(unittest.TestCase):
         member = zipfile.ZipInfo("trailgate-1.0.0.dist-info/METADATA")
         member.external_attr = (stat.S_IFLNK | 0o777) << 16
         self.assertEqual(_wheel_member_kind(member), "other")
+
+    def test_wheel_container_rejects_unrecorded_comments(self) -> None:
+        archive_bytes = io.BytesIO()
+        with zipfile.ZipFile(archive_bytes, "w") as package:
+            package.comment = b"fictional unrecorded comment"
+            package.writestr("fictional.txt", b"public")
+        with zipfile.ZipFile(archive_bytes) as package:
+            with self.assertRaisesRegex(ValueError, "unreviewed ZIP metadata"):
+                _check_wheel_container(package)
+
+        archive_bytes = io.BytesIO()
+        with zipfile.ZipFile(archive_bytes, "w") as package:
+            member = zipfile.ZipInfo("fictional.txt")
+            member.extra = b"\x01\x00\x00\x00"
+            package.writestr(member, b"public")
+        with zipfile.ZipFile(archive_bytes) as package:
+            with self.assertRaisesRegex(ValueError, "unreviewed ZIP metadata"):
+                _check_wheel_container(package)
+
+    def test_sdist_container_rejects_unreviewed_metadata(self) -> None:
+        member = tarfile.TarInfo("fictional.txt")
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "fictional.tar.gz"
+            path.write_bytes(b"\x1f\x8b\x08\x00" + b"\x00" * 6)
+            _check_sdist_container(path, [member], {})
+
+            member.pax_headers = {"comment": "fictional unreviewed comment"}
+            with self.assertRaisesRegex(ValueError, "unreviewed tar metadata"):
+                _check_sdist_container(path, [member], {})
+
+            member.pax_headers = {}
+            with self.assertRaisesRegex(ValueError, "unreviewed tar metadata"):
+                _check_sdist_container(path, [member], {"comment": "fictional comment"})
+
+            member.linkname = "fictional unreviewed link name"
+            with self.assertRaisesRegex(ValueError, "unreviewed tar metadata"):
+                _check_sdist_container(path, [member], {})
+
+            member.linkname = ""
+            path.write_bytes(b"\x1f\x8b\x08\x10" + b"\x00" * 6)
+            with self.assertRaisesRegex(ValueError, "unreviewed gzip metadata"):
+                _check_sdist_container(path, [member], {})
 
     def test_entry_points_match_reviewed_project(self) -> None:
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]

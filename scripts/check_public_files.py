@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEXT_NAMES = {".gitignore", ".python-version", "LICENSE", "uv.lock"}
-TEXT_SUFFIXES = {".json", ".jsonl", ".md", ".py", ".toml", ".yaml", ".yml"}
+TEXT_SUFFIXES = {".json", ".jsonl", ".md", ".py", ".svg", ".toml", ".yaml", ".yml"}
 EXCLUDED_PARTS = {".git", ".venv", "build", "dist", "__pycache__"}
 SENSITIVE_CONTENT = {
     "personal_absolute_path": re.compile(r"/(?:Users|home)/[^/\s<>]+/"),

@@ -14,7 +14,7 @@ Use uv 0.12.10 for release builds, matching CI and the checked wheel generator m
 6. Inspect `git status --short --untracked-files=all` and `git diff --cached --name-only`. Never stage an environment file, credential, private capture/archive/dataset, real corpus, or machine-specific path. Confirm repository-local Git identity and reread documentation for claims that exceed verified behavior.
 7. Check [v1 contracts and migration](CONTRACT.md), [threat model](SECURITY.md), and [comparison scope](COMPARISON.md). CI should pass across declared Python versions. A live Langfuse or Parquet combination not exercised in the matrix must be labeled untested.
 
-The release artifact checker validates the exact member set, the CLI entry point, project metadata, the wheel RECORD, and the active source-distribution build configuration. The public-file scanner is a heuristic. It rejects sensitive names before reading their contents and reports only rule names and line numbers for text findings; it cannot establish that all private material was found.
+The release artifact checker validates the exact member set, the CLI entry point, project metadata, the wheel RECORD, unreviewed ZIP/gzip/tar metadata, and the active source-distribution build configuration. The public-file scanner is a heuristic. It rejects sensitive names before reading their contents and reports only rule names and line numbers for text findings; it cannot establish that all private material was found.
 
 ## After review
 

@@ -6,6 +6,10 @@ Trailgate is a local-first Python CLI and library. It imports saved Langfuse Obs
 
 [日本語 README](README.ja.md) · [End-to-end guide](docs/GUIDE.md) · [v1 contracts](docs/CONTRACT.md) · [Roadmap](docs/ROADMAP.md) · [Release checklist](docs/RELEASING.md)
 
+![How an agent application, Langfuse, and Trailgate exchange trajectory evidence](docs/workflow.svg)
+
+Langfuse supplies observations and later scores; application-side capture supplies the exact model-boundary messages and delivered tool values. Trailgate keeps both as private source evidence before auditing and exporting. See [trajectory format choices](docs/FORMATS.md) for the distinction between its archival format and training views.
+
 ## Try the fictional fixture
 
 CPython 3.12.13–3.14 is supported; `.python-version` selects 3.12.13 for the locked development environment. From a fresh checkout:

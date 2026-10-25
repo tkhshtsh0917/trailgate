@@ -6,6 +6,10 @@ Trailgate はローカルで動く Python の CLI・ライブラリです。保�
 
 [English README](README.md) · [一通りの手順](docs/GUIDE.md) · [v1 の契約と移行](docs/CONTRACT.md) · [ロードマップ](docs/ROADMAP.md) · [公開手順](docs/RELEASING.md)
 
+![エージェントアプリ、Langfuse、Trailgate の軌跡データの流れ](docs/workflow.svg)
+
+Langfuse から観測記録と後から付く score を取得し、アプリ側ではモデルに実際に渡したメッセージと tool 結果を別に記録します。Trailgate は両方を非公開の出典として保存してから監査・出力します。保存形式と学習用 view の違いは[形式の選択](docs/FORMATS.md)を参照してください。
+
 ## 架空データで試す
 
 CPython 3.12.13〜3.14 に対応します。`.python-version` は開発環境用の 3.12.13 を指定しています。リポジトリのルートで実行してください。
