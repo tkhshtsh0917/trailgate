@@ -21,7 +21,7 @@ trailgate = "trailgate.cli:main"
 [project.optional-dependencies]
 bulk-parquet = ["pyarrow>=26,<27"]
 live = [
-    "langfuse>=4.8.1,<5",
+    "langfuse>=4.8.1,<6",
     "openai>=2",
 ]
 
